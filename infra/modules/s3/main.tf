@@ -9,7 +9,7 @@
 # Bucket
 # -----------------------------------------------------------------------------
 resource "aws_s3_bucket" "uploads" {
-  bucket = "${var.project}-${var.environment}-uploads-${var.aws_account_id}"
+  bucket = "${var.project}-${var.environment}-uploads-${var.aws_account_id}-us"
 
   tags = {
     Name = "${var.project}-${var.environment}-uploads"
