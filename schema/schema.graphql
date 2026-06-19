@@ -1,0 +1,313 @@
+# ============================================================
+# PackTrack — GraphQL Schema (Source of Truth)
+# ============================================================
+# This file is the single source of truth for the API contract.
+# It is loaded by the AppSync Terraform module at deploy time.
+# ============================================================
+
+# ============================================================
+# ENUMS
+# ============================================================
+
+enum PackageStatus {
+  RECIBIDO
+  NOTIFICADO
+  ENTREGADO
+  DEVUELTO
+  EXPIRADO
+}
+
+enum UserRole {
+  GUARD
+  RESIDENT
+  ADMIN
+}
+
+# ============================================================
+# TYPES
+# ============================================================
+
+type Building {
+  id: ID!
+  name: String!
+  address: String!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type Tower {
+  id: ID!
+  buildingId: ID!
+  name: String!
+  createdAt: AWSDateTime!
+}
+
+type Unit {
+  id: ID!
+  buildingId: ID!
+  towerId: ID!
+  number: String!
+  towerName: String
+  createdAt: AWSDateTime!
+}
+
+type Resident {
+  id: ID!
+  buildingId: ID!
+  towerId: ID!
+  unitId: ID!
+  cognitoUserId: String
+  fullName: String!
+  nameNormalized: String!
+  phone: String
+  email: String
+  towerName: String
+  unitNumber: String
+  createdAt: AWSDateTime!
+}
+
+type Package {
+  id: ID!
+  buildingId: ID!
+  towerId: ID!
+  unitId: ID!
+  residentId: ID!
+  residentName: String!
+  towerName: String
+  unitNumber: String
+  status: PackageStatus!
+  carrier: String
+  trackingNumber: String
+  labelPhotoKey: String
+  labelPhotoUrl: String
+  evidencePhotoKey: String
+  evidencePhotoUrl: String
+  pickupCode: String!
+  ocrRawData: AWSJSON
+  registeredBy: String!
+  deliveredBy: String
+  deliveredAt: AWSDateTime
+  notifiedAt: AWSDateTime
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+  expiresAt: AWSDateTime
+}
+
+type OCRResult {
+  suggestedName: String
+  suggestedTrackingNumber: String
+  suggestedCarrier: String
+  rawText: String
+  confidence: Float
+}
+
+type UploadUrl {
+  uploadUrl: String!
+  key: String!
+  expiresIn: Int!
+}
+
+type NotificationRecord {
+  id: ID!
+  packageId: ID!
+  residentId: ID!
+  channel: String!
+  status: String!
+  payload: AWSJSON
+  sentAt: AWSDateTime!
+}
+
+# ============================================================
+# CONNECTIONS (Pagination)
+# ============================================================
+
+type PackageConnection {
+  items: [Package!]!
+  nextToken: String
+}
+
+type ResidentConnection {
+  items: [Resident!]!
+  nextToken: String
+}
+
+type BuildingConnection {
+  items: [Building!]!
+  nextToken: String
+}
+
+type TowerConnection {
+  items: [Tower!]!
+  nextToken: String
+}
+
+type UnitConnection {
+  items: [Unit!]!
+  nextToken: String
+}
+
+# ============================================================
+# INPUTS
+# ============================================================
+
+input RegisterPackageInput {
+  buildingId: ID!
+  towerId: ID!
+  unitId: ID!
+  residentId: ID!
+  carrier: String
+  trackingNumber: String
+  labelPhotoKey: String
+}
+
+input ConfirmPickupInput {
+  buildingId: ID!
+  packageId: ID!
+  pickupCode: String!
+  evidencePhotoKey: String
+}
+
+input ProcessLabelInput {
+  s3Key: String!
+}
+
+input CreateBuildingInput {
+  name: String!
+  address: String!
+}
+
+input UpdateBuildingInput {
+  id: ID!
+  name: String
+  address: String
+}
+
+input CreateTowerInput {
+  buildingId: ID!
+  name: String!
+}
+
+input CreateUnitInput {
+  buildingId: ID!
+  towerId: ID!
+  number: String!
+}
+
+input CreateResidentInput {
+  buildingId: ID!
+  towerId: ID!
+  unitId: ID!
+  fullName: String!
+  phone: String
+  email: String
+}
+
+input UpdateResidentInput {
+  id: ID!
+  buildingId: ID!
+  fullName: String
+  phone: String
+  email: String
+}
+
+input GetUploadUrlInput {
+  buildingId: ID!
+  fileExtension: String!
+  purpose: String!
+}
+
+# ============================================================
+# QUERIES
+# ============================================================
+
+type Query {
+  # --- Packages ---
+  getPackage(buildingId: ID!, packageId: ID!): Package
+
+  listPackagesByStatus(
+    buildingId: ID!
+    status: PackageStatus!
+    limit: Int
+    nextToken: String
+  ): PackageConnection!
+
+  listMyPackages(
+    residentId: ID!
+    limit: Int
+    nextToken: String
+  ): PackageConnection!
+
+  verifyPickupCode(code: String!): Package
+
+  # --- Buildings / Admin ---
+  getBuilding(id: ID!): Building
+  listBuildings(limit: Int, nextToken: String): BuildingConnection!
+
+  listTowers(buildingId: ID!, limit: Int, nextToken: String): TowerConnection!
+  listUnits(
+    buildingId: ID!
+    towerId: ID
+    limit: Int
+    nextToken: String
+  ): UnitConnection!
+
+  # --- Residents ---
+  listResidents(
+    buildingId: ID!
+    limit: Int
+    nextToken: String
+  ): ResidentConnection!
+
+  searchResidents(
+    buildingId: ID!
+    query: String!
+    limit: Int
+  ): ResidentConnection!
+}
+
+# ============================================================
+# MUTATIONS
+# ============================================================
+
+type Mutation {
+  # --- Packages (Guard) ---
+  registerPackage(input: RegisterPackageInput!): Package!
+  confirmPickup(input: ConfirmPickupInput!): Package!
+  markPackageReturned(buildingId: ID!, packageId: ID!): Package!
+
+  # --- OCR ---
+  processLabel(input: ProcessLabelInput!): OCRResult!
+
+  # --- S3 ---
+  getUploadUrl(input: GetUploadUrlInput!): UploadUrl!
+
+  # --- Admin CRUD ---
+  createBuilding(input: CreateBuildingInput!): Building!
+  updateBuilding(input: UpdateBuildingInput!): Building!
+  deleteBuilding(id: ID!): ID!
+
+  createTower(input: CreateTowerInput!): Tower!
+  deleteTower(buildingId: ID!, towerId: ID!): ID!
+
+  createUnit(input: CreateUnitInput!): Unit!
+  deleteUnit(buildingId: ID!, unitId: ID!): ID!
+
+  createResident(input: CreateResidentInput!): Resident!
+  updateResident(input: UpdateResidentInput!): Resident!
+  deleteResident(buildingId: ID!, residentId: ID!): ID!
+}
+
+# ============================================================
+# SUBSCRIPTIONS
+# ============================================================
+
+type Subscription {
+  onPackageRegistered(buildingId: ID!): Package
+    @aws_subscribe(mutations: ["registerPackage"])
+
+  onPackagePickedUp(buildingId: ID!): Package
+    @aws_subscribe(mutations: ["confirmPickup"])
+
+  onMyPackageUpdated(residentId: ID!): Package
+    @aws_subscribe(mutations: ["registerPackage", "confirmPickup", "markPackageReturned"])
+}

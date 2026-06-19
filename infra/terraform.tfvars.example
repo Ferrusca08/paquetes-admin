@@ -1,0 +1,21 @@
+# =============================================================================
+# PackTrack — Terraform Variables Template
+# =============================================================================
+# Copy this file to terraform.tfvars and fill in your values.
+# NEVER commit terraform.tfvars to version control.
+# =============================================================================
+
+project        = "packtrack"
+environment    = "dev"
+aws_region     = "mx-central-1"
+aws_account_id = "123456789012"  # Replace with your AWS account ID
+
+# Optional overrides
+# cognito_password_min_length      = 8
+# s3_lifecycle_ia_transition_days  = 90
+
+tags = {
+  Project     = "packtrack"
+  Environment = "dev"
+  ManagedBy   = "terraform"
+}
