@@ -12,7 +12,7 @@ override.tf
 override.tf.json
 *_override.tf
 *_override.tf.json
-.terraform.lock.hcl
+# Note: .terraform.lock.hcl IS committed (reproducible provider versions)
 
 # =============================================================================
 # Node / TypeScript
