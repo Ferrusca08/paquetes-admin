@@ -98,4 +98,24 @@ module "appsync" {
   aws_region           = var.aws_region
   cognito_user_pool_id = module.cognito.user_pool_id
   schema               = local.graphql_schema
+  lambda_function_arns = module.lambda.function_arns
+  lambda_role_arn      = module.lambda.role_arn
 }
+
+# -----------------------------------------------------------------------------
+# Module: Lambda (Resolvers)
+# -----------------------------------------------------------------------------
+module "lambda" {
+  source = "./modules/lambda"
+
+  project             = var.project
+  environment         = var.environment
+  aws_region          = var.aws_region
+  dynamodb_table_name = module.dynamodb.table_name
+  dynamodb_table_arn  = module.dynamodb.table_arn
+  s3_bucket_name      = module.s3.bucket_name
+  s3_bucket_arn       = module.s3.bucket_arn
+  appsync_api_id      = module.appsync.api_id
+  appsync_api_arn     = module.appsync.api_arn
+}
+

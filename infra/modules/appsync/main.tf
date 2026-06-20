@@ -2,8 +2,8 @@
 # PackTrack — AppSync Module
 # =============================================================================
 # Creates the GraphQL API with Cognito User Pool authentication.
-# Phase 1: Schema skeleton + NONE data source (placeholder).
-# Phase 2 will add Lambda data sources and resolvers.
+# Phase 1: Schema + NONE data source.
+# Phase 2: Lambda data sources + resolvers for all operations.
 # =============================================================================
 
 # -----------------------------------------------------------------------------
@@ -34,14 +34,200 @@ resource "aws_appsync_graphql_api" "main" {
 }
 
 # -----------------------------------------------------------------------------
-# NONE Data Source (placeholder for Phase 1)
-# Used for local resolvers / subscriptions
+# NONE Data Source (for local resolvers / subscriptions)
 # -----------------------------------------------------------------------------
 resource "aws_appsync_datasource" "none" {
   api_id           = aws_appsync_graphql_api.main.id
   name             = "NoneDataSource"
   type             = "NONE"
   description      = "Placeholder data source for local resolvers and subscriptions"
+}
+
+# -----------------------------------------------------------------------------
+# IAM Role — AppSync assumes this to invoke Lambda functions
+# -----------------------------------------------------------------------------
+resource "aws_iam_role" "appsync_lambda" {
+  count = length(var.lambda_function_arns) > 0 ? 1 : 0
+  name  = "${var.project}-${var.environment}-appsync-lambda"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "appsync.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "appsync_lambda_invoke" {
+  count = length(var.lambda_function_arns) > 0 ? 1 : 0
+  name  = "${var.project}-${var.environment}-appsync-lambda-invoke"
+  role  = aws_iam_role.appsync_lambda[0].id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = "lambda:InvokeFunction"
+        Resource = values(var.lambda_function_arns)
+      }
+    ]
+  })
+}
+
+# -----------------------------------------------------------------------------
+# Lambda Data Sources
+# -----------------------------------------------------------------------------
+resource "aws_appsync_datasource" "lambda" {
+  for_each = var.lambda_function_arns
+
+  api_id           = aws_appsync_graphql_api.main.id
+  name             = replace(each.key, "-", "_")
+  type             = "AWS_LAMBDA"
+  description      = "Lambda data source: ${each.key}"
+  service_role_arn = aws_iam_role.appsync_lambda[0].arn
+
+  lambda_config {
+    function_arn = each.value
+  }
+}
+
+# -----------------------------------------------------------------------------
+# Resolvers — Mutations (dedicated Lambdas)
+# -----------------------------------------------------------------------------
+resource "aws_appsync_resolver" "register_package" {
+  count = contains(keys(var.lambda_function_arns), "register-package") ? 1 : 0
+
+  api_id      = aws_appsync_graphql_api.main.id
+  type        = "Mutation"
+  field       = "registerPackage"
+  data_source = aws_appsync_datasource.lambda["register-package"].name
+}
+
+resource "aws_appsync_resolver" "confirm_pickup" {
+  count = contains(keys(var.lambda_function_arns), "confirm-pickup") ? 1 : 0
+
+  api_id      = aws_appsync_graphql_api.main.id
+  type        = "Mutation"
+  field       = "confirmPickup"
+  data_source = aws_appsync_datasource.lambda["confirm-pickup"].name
+}
+
+resource "aws_appsync_resolver" "get_upload_url" {
+  count = contains(keys(var.lambda_function_arns), "get-upload-url") ? 1 : 0
+
+  api_id      = aws_appsync_graphql_api.main.id
+  type        = "Mutation"
+  field       = "getUploadUrl"
+  data_source = aws_appsync_datasource.lambda["get-upload-url"].name
+}
+
+# -----------------------------------------------------------------------------
+# Resolvers — Packages multi-resolver
+# -----------------------------------------------------------------------------
+locals {
+  packages_resolver_fields = {
+    # Queries
+    "Query-getPackage"           = { type = "Query",    field = "getPackage" }
+    "Query-listPackagesByStatus" = { type = "Query",    field = "listPackagesByStatus" }
+    "Query-listMyPackages"       = { type = "Query",    field = "listMyPackages" }
+    "Query-verifyPickupCode"     = { type = "Query",    field = "verifyPickupCode" }
+    # Mutations
+    "Mutation-markPackageReturned" = { type = "Mutation", field = "markPackageReturned" }
+  }
+
+  admin_resolver_fields = {
+    # Queries
+    "Query-getBuilding"      = { type = "Query",    field = "getBuilding" }
+    "Query-listBuildings"    = { type = "Query",    field = "listBuildings" }
+    "Query-listTowers"       = { type = "Query",    field = "listTowers" }
+    "Query-listUnits"        = { type = "Query",    field = "listUnits" }
+    "Query-listResidents"    = { type = "Query",    field = "listResidents" }
+    "Query-searchResidents"  = { type = "Query",    field = "searchResidents" }
+    # Mutations
+    "Mutation-createBuilding"  = { type = "Mutation", field = "createBuilding" }
+    "Mutation-updateBuilding"  = { type = "Mutation", field = "updateBuilding" }
+    "Mutation-deleteBuilding"  = { type = "Mutation", field = "deleteBuilding" }
+    "Mutation-createTower"     = { type = "Mutation", field = "createTower" }
+    "Mutation-deleteTower"     = { type = "Mutation", field = "deleteTower" }
+    "Mutation-createUnit"      = { type = "Mutation", field = "createUnit" }
+    "Mutation-deleteUnit"      = { type = "Mutation", field = "deleteUnit" }
+    "Mutation-createResident"  = { type = "Mutation", field = "createResident" }
+    "Mutation-updateResident"  = { type = "Mutation", field = "updateResident" }
+    "Mutation-deleteResident"  = { type = "Mutation", field = "deleteResident" }
+  }
+}
+
+resource "aws_appsync_resolver" "packages" {
+  for_each = contains(keys(var.lambda_function_arns), "packages-resolver") ? local.packages_resolver_fields : {}
+
+  api_id      = aws_appsync_graphql_api.main.id
+  type        = each.value.type
+  field       = each.value.field
+  data_source = aws_appsync_datasource.lambda["packages-resolver"].name
+}
+
+resource "aws_appsync_resolver" "admin" {
+  for_each = contains(keys(var.lambda_function_arns), "admin-resolver") ? local.admin_resolver_fields : {}
+
+  api_id      = aws_appsync_graphql_api.main.id
+  type        = each.value.type
+  field       = each.value.field
+  data_source = aws_appsync_datasource.lambda["admin-resolver"].name
+}
+
+# -----------------------------------------------------------------------------
+# Resolvers — Subscriptions (NONE data source, local resolvers)
+# -----------------------------------------------------------------------------
+locals {
+  subscription_fields = {
+    "onPackageRegistered" = { field = "onPackageRegistered" }
+    "onPackagePickedUp"   = { field = "onPackagePickedUp" }
+    "onMyPackageUpdated"  = { field = "onMyPackageUpdated" }
+  }
+}
+
+resource "aws_appsync_resolver" "subscriptions" {
+  for_each = local.subscription_fields
+
+  api_id      = aws_appsync_graphql_api.main.id
+  type        = "Subscription"
+  field       = each.value.field
+  data_source = aws_appsync_datasource.none.name
+
+  request_template  = "{\"version\": \"2017-02-28\", \"payload\": $util.toJson($context.arguments)}"
+  response_template = "$util.toJson($context.result)"
+}
+
+# -----------------------------------------------------------------------------
+# Resolver — processLabel (placeholder — uses NONE until OCR Lambda is added)
+# -----------------------------------------------------------------------------
+resource "aws_appsync_resolver" "process_label" {
+  api_id      = aws_appsync_graphql_api.main.id
+  type        = "Mutation"
+  field       = "processLabel"
+  data_source = aws_appsync_datasource.none.name
+
+  request_template = <<-EOF
+    {
+      "version": "2017-02-28",
+      "payload": {
+        "suggestedName": null,
+        "suggestedTrackingNumber": null,
+        "suggestedCarrier": null,
+        "rawText": "OCR not yet implemented",
+        "confidence": 0
+      }
+    }
+  EOF
+
+  response_template = "$util.toJson($context.result)"
 }
 
 # -----------------------------------------------------------------------------
@@ -69,11 +255,3 @@ resource "aws_iam_role_policy_attachment" "appsync_logs" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSAppSyncPushToCloudWatchLogs"
 }
 
-# -----------------------------------------------------------------------------
-# API Key (optional — for development/testing without Cognito)
-# Disabled by default; uncomment if you need unauthenticated access.
-# -----------------------------------------------------------------------------
-# resource "aws_appsync_api_key" "dev" {
-#   api_id  = aws_appsync_graphql_api.main.id
-#   expires = timeadd(timestamp(), "8760h")  # 1 year
-# }

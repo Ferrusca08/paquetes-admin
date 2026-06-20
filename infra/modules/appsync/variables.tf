@@ -26,3 +26,15 @@ variable "schema" {
   description = "GraphQL schema definition (file content)"
   type        = string
 }
+
+variable "lambda_function_arns" {
+  description = "Map of Lambda function name → ARN for data sources"
+  type        = map(string)
+  default     = {}
+}
+
+variable "lambda_role_arn" {
+  description = "IAM role ARN that AppSync assumes to invoke Lambda functions"
+  type        = string
+  default     = ""
+}
