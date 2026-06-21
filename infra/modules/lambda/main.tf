@@ -13,11 +13,14 @@ locals {
   memory        = 256
 
   # Common environment variables for all Lambda functions
-  common_env = {
-    TABLE_NAME  = var.dynamodb_table_name
-    BUCKET_NAME = var.s3_bucket_name
-    AWS_NODEJS_CONNECTION_REUSE_ENABLED = "1"
-  }
+  common_env = merge(
+    {
+      TABLE_NAME  = var.dynamodb_table_name
+      BUCKET_NAME = var.s3_bucket_name
+      AWS_NODEJS_CONNECTION_REUSE_ENABLED = "1"
+    },
+    var.notification_topic_arn != "" ? { NOTIFICATION_TOPIC_ARN = var.notification_topic_arn } : {}
+  )
 
   # Function definitions: name → handler-specific overrides
   functions = {

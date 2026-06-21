@@ -82,6 +82,14 @@ export const handler = async (event: AppSyncResolverEvent) => {
       return updateResident(event);
     case "deleteResident":
       return deleteResident(event);
+    case "registerPushToken":
+      return registerPushToken(
+        event as AppSyncResolverEvent<{
+          residentId: string;
+          buildingId: string;
+          pushToken: string;
+        }>,
+      );
 
     default:
       throw new Error(`Unknown field: ${field}`);
@@ -582,6 +590,22 @@ async function deleteResident(
     }),
   );
   return residentId;
+}
+
+async function registerPushToken(
+  event: AppSyncResolverEvent<{ residentId: string; buildingId: string; pushToken: string }>,
+) {
+  const { residentId, buildingId, pushToken } = event.arguments;
+  await docClient.send(
+    new UpdateCommand({
+      TableName: TABLE_NAME,
+      Key: { PK: PK.building(buildingId), SK: SK.resident(residentId) },
+      UpdateExpression: "SET pushToken = :token",
+      ExpressionAttributeValues: { ":token": pushToken },
+      ConditionExpression: "attribute_exists(PK)",
+    }),
+  );
+  return true;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────

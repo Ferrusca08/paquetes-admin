@@ -8,7 +8,10 @@
  * 4. Returns the full Package object for AppSync
  */
 import { GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
 import { docClient } from "../shared/dynamo-client.js";
+
+const sns = new SNSClient({});
 import {
   TABLE_NAME,
   PK,
@@ -98,6 +101,33 @@ export const handler = async (
       ConditionExpression: "attribute_not_exists(PK)",
     }),
   );
+
+  // ─── Publish notification event to SNS (fire-and-forget) ─────────────
+  if (process.env.NOTIFICATION_TOPIC_ARN) {
+    try {
+      await sns.send(
+        new PublishCommand({
+          TopicArn: process.env.NOTIFICATION_TOPIC_ARN,
+          Message: JSON.stringify({
+            type: "PACKAGE_REGISTERED",
+            packageId,
+            buildingId: input.buildingId,
+            residentId: input.residentId,
+            residentName: resident.fullName,
+            towerName: resident.towerName,
+            unitNumber: resident.unitNumber,
+            pickupCode,
+            carrier: input.carrier,
+            createdAt,
+          }),
+          Subject: "PackTrack:PACKAGE_REGISTERED",
+        }),
+      );
+    } catch (err) {
+      // Don't fail package registration if notification fails
+      console.error("[register-package] SNS publish failed:", err);
+    }
+  }
 
   // ─── Return for AppSync ──────────────────────────────────────────────
   return {

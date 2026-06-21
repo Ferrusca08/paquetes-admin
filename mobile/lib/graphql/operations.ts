@@ -137,3 +137,9 @@ export const onMyPackageUpdated = /* GraphQL */ `
     }
   }
 `;
+
+export const registerPushToken = /* GraphQL */ `
+  mutation RegisterPushToken($residentId: ID!, $buildingId: ID!, $pushToken: String!) {
+    registerPushToken(residentId: $residentId, buildingId: $buildingId, pushToken: $pushToken)
+  }
+`;

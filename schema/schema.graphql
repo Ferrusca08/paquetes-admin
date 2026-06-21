@@ -295,6 +295,9 @@ type Mutation {
   createResident(input: CreateResidentInput!): Resident!
   updateResident(input: UpdateResidentInput!): Resident!
   deleteResident(buildingId: ID!, residentId: ID!): ID!
+
+  # --- Notifications ---
+  registerPushToken(residentId: ID!, buildingId: ID!, pushToken: String!): Boolean!
 }
 
 # ============================================================

@@ -46,3 +46,9 @@ variable "appsync_api_arn" {
   description = "AppSync GraphQL API ARN"
   type        = string
 }
+
+variable "notification_topic_arn" {
+  description = "SNS topic ARN for package events (passed to register-package env)"
+  type        = string
+  default     = ""
+}

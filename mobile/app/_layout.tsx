@@ -12,6 +12,7 @@ import {
   loadCurrentUser,
   appSignOut,
 } from '../lib/hooks/useAuth';
+import { setupPushNotifications } from '../lib/notifications';
 
 export default function RootLayout() {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -30,10 +31,19 @@ export default function RootLayout() {
     setUser(null);
   };
 
+  const maybeRegisterPushToken = (u: AuthUser | null) => {
+    if (u?.role === 'RESIDENT' && u.residentId && u.buildingId) {
+      setupPushNotifications(u.residentId, u.buildingId);
+    }
+  };
+
   // Load user on mount
   useEffect(() => {
     loadCurrentUser()
-      .then(setUser)
+      .then((u) => {
+        setUser(u);
+        maybeRegisterPushToken(u);
+      })
       .finally(() => setIsLoading(false));
   }, []);
 
@@ -43,6 +53,7 @@ export default function RootLayout() {
       if (payload.event === 'signedIn') {
         const u = await loadCurrentUser();
         setUser(u);
+        maybeRegisterPushToken(u);
       } else if (payload.event === 'signedOut') {
         setUser(null);
       }

@@ -30,6 +30,15 @@
         {
           "photosPermission": "PackTrack necesita acceso a tus fotos para adjuntar evidencia de entrega."
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#2563EB",
+          "defaultChannel": "paquetes",
+          "sounds": []
+        }
       ]
     ]
   }

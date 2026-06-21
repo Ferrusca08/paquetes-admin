@@ -158,9 +158,10 @@ locals {
     "Mutation-deleteTower"     = { type = "Mutation", field = "deleteTower" }
     "Mutation-createUnit"      = { type = "Mutation", field = "createUnit" }
     "Mutation-deleteUnit"      = { type = "Mutation", field = "deleteUnit" }
-    "Mutation-createResident"  = { type = "Mutation", field = "createResident" }
-    "Mutation-updateResident"  = { type = "Mutation", field = "updateResident" }
-    "Mutation-deleteResident"  = { type = "Mutation", field = "deleteResident" }
+    "Mutation-createResident"      = { type = "Mutation", field = "createResident" }
+    "Mutation-updateResident"      = { type = "Mutation", field = "updateResident" }
+    "Mutation-deleteResident"      = { type = "Mutation", field = "deleteResident" }
+    "Mutation-registerPushToken"   = { type = "Mutation", field = "registerPushToken" }
   }
 }
 

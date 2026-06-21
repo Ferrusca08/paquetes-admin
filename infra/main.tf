@@ -107,15 +107,16 @@ module "appsync" {
 module "lambda" {
   source = "./modules/lambda"
 
-  project             = var.project
-  environment         = var.environment
-  aws_region          = var.aws_region
-  dynamodb_table_name = module.dynamodb.table_name
-  dynamodb_table_arn  = module.dynamodb.table_arn
-  s3_bucket_name      = module.s3.bucket_name
-  s3_bucket_arn       = module.s3.bucket_arn
-  appsync_api_id      = module.appsync.api_id
-  appsync_api_arn     = module.appsync.api_arn
+  project                = var.project
+  environment            = var.environment
+  aws_region             = var.aws_region
+  dynamodb_table_name    = module.dynamodb.table_name
+  dynamodb_table_arn     = module.dynamodb.table_arn
+  s3_bucket_name         = module.s3.bucket_name
+  s3_bucket_arn          = module.s3.bucket_arn
+  appsync_api_id         = module.appsync.api_id
+  appsync_api_arn        = module.appsync.api_arn
+  notification_topic_arn = aws_sns_topic.package_events.arn
 }
 
 # -----------------------------------------------------------------------------
@@ -129,4 +130,31 @@ module "github_oidc" {
   aws_region     = var.aws_region
   aws_account_id = var.aws_account_id
   github_repo    = "Ferrusca08/paquetes-admin"
+}
+
+# -----------------------------------------------------------------------------
+# SNS Topic — Package Events
+# Created here (not inside a module) to avoid circular dependencies.
+# module.lambda publishes to it; module.notifications subscribes to it.
+# -----------------------------------------------------------------------------
+resource "aws_sns_topic" "package_events" {
+  name = "${var.project}-${var.environment}-package-events"
+
+  tags = {
+    Name = "${var.project}-${var.environment}-package-events"
+  }
+}
+
+# -----------------------------------------------------------------------------
+# Module: Notifications (send-notification Lambda + SNS subscription)
+# -----------------------------------------------------------------------------
+module "notifications" {
+  source = "./modules/notifications"
+
+  project             = var.project
+  environment         = var.environment
+  topic_arn           = aws_sns_topic.package_events.arn
+  lambda_role_arn     = module.lambda.role_arn
+  dynamodb_table_name = module.dynamodb.table_name
+  functions_dist_dir  = "${path.module}/../functions/dist"
 }

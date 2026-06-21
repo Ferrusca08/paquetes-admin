@@ -104,6 +104,7 @@ export interface ResidentItem {
   email?: string;
   towerName?: string;
   unitNumber?: string;
+  pushToken?: string;
   createdAt: string;
 }
 
