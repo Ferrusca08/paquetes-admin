@@ -36,6 +36,9 @@ locals {
     admin-resolver = {
       description = "Multi-resolver for admin CRUD operations"
     }
+    process-label = {
+      description = "OCR label processing with AWS Textract"
+    }
   }
 }
 
@@ -105,7 +108,7 @@ resource "aws_iam_role_policy" "dynamodb" {
   })
 }
 
-# S3 access (for presigned URL generation)
+# S3 access (for presigned URL generation + Textract source)
 resource "aws_iam_role_policy" "s3" {
   name = "${var.project}-${var.environment}-lambda-s3"
   role = aws_iam_role.lambda.id
@@ -120,6 +123,26 @@ resource "aws_iam_role_policy" "s3" {
           "s3:GetObject",
         ]
         Resource = "${var.s3_bucket_arn}/*"
+      }
+    ]
+  })
+}
+
+# Textract access (for OCR label processing)
+resource "aws_iam_role_policy" "textract" {
+  name = "${var.project}-${var.environment}-lambda-textract"
+  role = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "textract:DetectDocumentText",
+          "textract:AnalyzeDocument",
+        ]
+        Resource = "*"
       }
     ]
   })

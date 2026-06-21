@@ -206,9 +206,21 @@ resource "aws_appsync_resolver" "subscriptions" {
 }
 
 # -----------------------------------------------------------------------------
-# Resolver — processLabel (placeholder — uses NONE until OCR Lambda is added)
+# Resolver — processLabel (AWS Textract OCR)
 # -----------------------------------------------------------------------------
 resource "aws_appsync_resolver" "process_label" {
+  count = contains(keys(var.lambda_function_arns), "process-label") ? 1 : 0
+
+  api_id      = aws_appsync_graphql_api.main.id
+  type        = "Mutation"
+  field       = "processLabel"
+  data_source = aws_appsync_datasource.lambda["process-label"].name
+}
+
+# Fallback resolver for processLabel if Lambda not yet wired
+resource "aws_appsync_resolver" "process_label_placeholder" {
+  count = contains(keys(var.lambda_function_arns), "process-label") ? 0 : 1
+
   api_id      = aws_appsync_graphql_api.main.id
   type        = "Mutation"
   field       = "processLabel"

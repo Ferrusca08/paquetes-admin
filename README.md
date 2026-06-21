@@ -32,8 +32,8 @@ packtrack/
 ## Fases de desarrollo
 
 - **Fase 1** ✅ Infra base: Cognito, DynamoDB, S3, AppSync skeleton
-- **Fase 2** ⬜ Schema GraphQL + resolvers Lambda + registerPackage + confirmPickup
-- **Fase 3** ⬜ Textract OCR + S3 presigned URLs
+- **Fase 2** ✅ Schema GraphQL + resolvers Lambda + registerPackage + confirmPickup
+- **Fase 3** ✅ Textract OCR + S3 presigned URLs + CI/CD GitHub Actions (OIDC)
 - **Fase 4** ⬜ App Expo: login, flujo guardia, flujo residente
 - **Fase 5** ⬜ Notificaciones: SNS push + WhatsApp (DEMO_MODE)
 

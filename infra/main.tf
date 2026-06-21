@@ -21,14 +21,13 @@ terraform {
     }
   }
 
-  # Uncomment and configure for remote state (recommended for teams):
-  # backend "s3" {
-  #   bucket         = "packtrack-terraform-state"
-  #   key            = "infra/terraform.tfstate"
-  #   region         = "mx-central-1"
-  #   dynamodb_table = "packtrack-terraform-locks"
-  #   encrypt        = true
-  # }
+  backend "s3" {
+    bucket         = "packtrack-terraform-state-806156384483"
+    key            = "dev/terraform.tfstate"
+    region         = "us-east-1"
+    dynamodb_table = "packtrack-terraform-locks"
+    encrypt        = true
+  }
 }
 
 # -----------------------------------------------------------------------------
@@ -119,3 +118,15 @@ module "lambda" {
   appsync_api_arn     = module.appsync.api_arn
 }
 
+# -----------------------------------------------------------------------------
+# Module: GitHub OIDC (CI/CD)
+# -----------------------------------------------------------------------------
+module "github_oidc" {
+  source = "./modules/github-oidc"
+
+  project        = var.project
+  environment    = var.environment
+  aws_region     = var.aws_region
+  aws_account_id = var.aws_account_id
+  github_repo    = "Ferrusca08/paquetes-admin"
+}
