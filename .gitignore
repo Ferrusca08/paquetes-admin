@@ -49,6 +49,7 @@ mobile/web-build/
 .env.local
 .env.*.local
 *.pem
+mobile/.env.local
 
 # =============================================================================
 # OS

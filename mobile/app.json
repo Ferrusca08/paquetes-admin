@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "PackTrack",
+    "slug": "packtrack",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "scheme": "packtrack",
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.packtrack.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#2563EB"
+      },
+      "package": "com.packtrack.app"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "PackTrack necesita acceso a la cámara para tomar fotos de etiquetas y evidencia de entrega."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "PackTrack necesita acceso a tus fotos para adjuntar evidencia de entrega."
+        }
+      ]
+    ]
+  }
+}
