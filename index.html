@@ -136,11 +136,11 @@
     <aside class="sidebar">
       <div class="brand">Pack<span>Track</span></div>
       <nav class="nav" id="nav">
-        <div class="nav-item active" data-view="overview"><span class="ico">📊</span> Resumen</div>
-        <div class="nav-item" data-view="packages"><span class="ico">📦</span> Paquetes</div>
-        <div class="nav-item" data-view="residents"><span class="ico">👥</span> Residentes</div>
-        <div class="nav-item" data-view="guards"><span class="ico">🛡️</span> Guardias</div>
-        <div class="nav-item" data-view="buildings"><span class="ico">🏢</span> Edificios</div>
+        <div class="nav-item active" data-view="overview"><span class="ico"></span> Resumen</div>
+        <div class="nav-item" data-view="packages"><span class="ico"></span> Paquetes</div>
+        <div class="nav-item" data-view="residents"><span class="ico"></span> Residentes</div>
+        <div class="nav-item" data-view="guards"><span class="ico"></span> Guardias</div>
+        <div class="nav-item" data-view="buildings"><span class="ico"></span> Edificios</div>
       </nav>
       <div class="foot">PackTrack Admin · dev<br/>v1.0</div>
     </aside>
@@ -271,6 +271,23 @@ const M = {
    ============================================================ */
 const $ = s=>document.querySelector(s);
 const esc = s=> (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* ---- Iconos SVG monocromáticos (estilo Feather, heredan currentColor) ---- */
+const ICONS = {
+  overview:'<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+  package:'<path d="M16.5 9.4 7.55 4.24"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
+  users:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  shield:'<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+  home:'<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+  inbox:'<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+  user:'<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  upload:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
+  alert:'<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+};
+function icon(name, size){ size=size||18; return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.18em">${ICONS[name]||''}</svg>`; }
+const NAV_ICON = { overview:'overview', packages:'package', residents:'users', guards:'shield', buildings:'home' };
+document.querySelectorAll('.nav-item').forEach(n=>{ const ic=n.querySelector('.ico'); if(ic) ic.innerHTML=icon(NAV_ICON[n.dataset.view]||'package',18); });
+
 function fmtDate(d){ if(!d) return "—"; const x=new Date(d); return x.toLocaleDateString("es-MX",{day:"2-digit",month:"short",year:"numeric"}); }
 function badge(status){ return `<span class="badge b-${status.toLowerCase()}"><span class="dot" style="background:${STATUS_COLOR[status]}"></span>${STATUS_LABEL[status]||status}</span>`; }
 function toast(msg, type){ const t=$("#toast"); t.textContent=msg; t.className="toast show"+(type==="err"?" err":""); setTimeout(()=>t.className="toast",2600); }
@@ -337,10 +354,10 @@ async function renderOverview(){
     <div class="page-title">Resumen</div>
     <div class="page-sub">Edificio: <strong>${esc(bname)}</strong></div>
     <div class="stats">
-      <div class="stat"><div class="lbl">🏢 Edificios</div><div class="val">${S.buildings.length}</div></div>
-      <div class="stat"><div class="lbl">👥 Residentes</div><div class="val">${S.residents.length}</div></div>
-      <div class="stat"><div class="lbl">🛡️ Guardias</div><div class="val">${S.guards.length}</div></div>
-      <div class="stat"><div class="lbl">📦 Paquetes</div><div class="val">${totalPkg}</div></div>
+      <div class="stat"><div class="lbl">${icon('home',15)} Edificios</div><div class="val">${S.buildings.length}</div></div>
+      <div class="stat"><div class="lbl">${icon('users',15)} Residentes</div><div class="val">${S.residents.length}</div></div>
+      <div class="stat"><div class="lbl">${icon('shield',15)} Guardias</div><div class="val">${S.guards.length}</div></div>
+      <div class="stat"><div class="lbl">${icon('package',15)} Paquetes</div><div class="val">${totalPkg}</div></div>
     </div>
     <div class="card">
       <div class="card-head"><h3>Paquetes por estado</h3></div>
@@ -355,7 +372,7 @@ async function renderOverview(){
 /* ---- PACKAGES ---- */
 let pkgStatus = "RECIBIDO";
 async function renderPackages(){
-  if(!S.building){ return emptyState("📦","Selecciona un edificio para ver paquetes"); }
+  if(!S.building){ return emptyState("package","Selecciona un edificio para ver paquetes"); }
   $("#content").innerHTML = `
     <div class="page-title">Paquetes</div>
     <div class="page-sub">Gestión de paquetes del edificio</div>
@@ -367,7 +384,7 @@ async function renderPackages(){
   let items=[];
   try{ const d=await gql(Q.listPackages,{b:S.building,s:pkgStatus}); items=d.listPackagesByStatus.items||[]; }
   catch(e){ $("#pkgList").innerHTML=`<div class="empty">Error: ${esc(e.message)}</div>`; return; }
-  if(!items.length){ $("#pkgList").innerHTML=emptyHtml("📭","Sin paquetes en estado "+STATUS_LABEL[pkgStatus]); return; }
+  if(!items.length){ $("#pkgList").innerHTML=emptyHtml("inbox","Sin paquetes en estado "+STATUS_LABEL[pkgStatus]); return; }
   $("#pkgList").innerHTML = `<div class="card"><div class="card-body"><table>
     <thead><tr><th>Residente</th><th>Ubicación</th><th>Paquetería</th><th>Código</th><th>Estado</th><th>Fecha</th></tr></thead>
     <tbody>${items.map(p=>`<tr>
@@ -382,14 +399,14 @@ async function renderPackages(){
 
 /* ---- RESIDENTS ---- */
 async function renderResidents(){
-  if(!S.building){ return emptyState("👥","Selecciona un edificio"); }
+  if(!S.building){ return emptyState("users","Selecciona un edificio"); }
   $("#content").innerHTML = `
     <div class="page-title">Residentes</div>
     <div class="page-sub">${S.residents.length} residentes registrados · al crear uno con email se le envía invitación para entrar a la app</div>
     <div class="card">
       <div class="card-head"><h3>Lista de residentes</h3>
         <div style="display:flex;gap:8px">
-          <button class="btn btn-ghost btn-sm" onclick="$('#csvInput').click()">⬆ Importar CSV</button>
+          <button class="btn btn-ghost btn-sm" onclick="$('#csvInput').click()">${icon('upload',14)} Importar CSV</button>
           <button class="btn btn-sm" onclick="residentForm()">+ Nuevo residente</button>
         </div></div>
       <input type="file" id="csvInput" accept=".csv,text/csv" style="display:none" onchange="onCsvSelected(event)" />
@@ -404,7 +421,7 @@ async function renderResidents(){
               <button class="btn btn-ghost btn-sm" onclick='residentForm(${JSON.stringify(r)})'>Editar</button>
               <button class="btn btn-danger btn-sm" onclick="delResident('${r.id}','${esc(r.fullName)}')">Eliminar</button>
             </div></td>
-          </tr>`).join("")}</tbody></table>` : emptyHtml("👤","Aún no hay residentes")}
+          </tr>`).join("")}</tbody></table>` : emptyHtml("user","Aún no hay residentes")}
       </div>
     </div>`;
 }
@@ -532,7 +549,7 @@ async function runCsvImport(){
 
 /* ---- GUARDS ---- */
 async function renderGuards(){
-  if(!S.building){ return emptyState("🛡️","Selecciona un edificio"); }
+  if(!S.building){ return emptyState("shield","Selecciona un edificio"); }
   $("#content").innerHTML = `
     <div class="page-title">Guardias</div>
     <div class="page-sub">${S.guards.length} guardias · personal de vigilancia con acceso a la app</div>
@@ -549,7 +566,7 @@ async function renderGuards(){
             <td><div class="row-actions">
               <button class="btn btn-danger btn-sm" onclick="delGuard('${esc(g.id)}','${esc(g.fullName)}')">Eliminar</button>
             </div></td>
-          </tr>`).join("")}</tbody></table>` : emptyHtml("🛡️","Aún no hay guardias")}
+          </tr>`).join("")}</tbody></table>` : emptyHtml("shield","Aún no hay guardias")}
       </div>
     </div>`;
 }
@@ -614,7 +631,7 @@ async function renderBuildings(){
               <button class="btn btn-ghost btn-sm" onclick='buildingForm(${JSON.stringify(b)})'>Editar</button>
               <button class="btn btn-danger btn-sm" onclick="delBuilding('${b.id}','${esc(b.name)}')">Eliminar</button>
             </div></td>
-          </tr>`).join("")}</tbody></table>` : emptyHtml("🏢","Crea tu primer edificio")}
+          </tr>`).join("")}</tbody></table>` : emptyHtml("home","Crea tu primer edificio")}
       </div>
     </div>`;
 }
@@ -648,7 +665,7 @@ async function delBuilding(id,name){
 }
 
 /* ---- empty helpers ---- */
-function emptyHtml(ico,msg){ return `<div class="empty"><div class="big">${ico}</div>${esc(msg)}</div>`; }
+function emptyHtml(ico,msg){ return `<div class="empty"><div class="big" style="color:var(--border)">${icon(ico,40)}</div>${esc(msg)}</div>`; }
 function emptyState(ico,msg){ $("#content").innerHTML=`<div class="card"><div class="card-body">${emptyHtml(ico,msg)}</div></div>`; }
 
 /* ============================================================
@@ -688,7 +705,7 @@ async function boot(){
     render();
   }catch(e){
     if(/Unauthorized|token|expired/i.test(e.message)){ logout(); return; }
-    $("#content").innerHTML=`<div class="empty"><div class="big">⚠️</div>${esc(e.message)}</div>`;
+    $("#content").innerHTML=`<div class="empty"><div class="big" style="color:var(--border)">${icon('alert',40)}</div>${esc(e.message)}</div>`;
   }
 }
 
