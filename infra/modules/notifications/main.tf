@@ -58,7 +58,9 @@ resource "aws_lambda_function" "send_notification" {
   environment {
     variables = {
       TABLE_NAME     = var.dynamodb_table_name
-      SMS_ENABLED    = "true"
+      # SMS disabled for now — push notifications only. Flip to "true" once the
+      # AWS account is enabled for SMS (out of sandbox + origination identity).
+      SMS_ENABLED    = "false"
       AWS_NODEJS_CONNECTION_REUSE_ENABLED = "1"
     }
   }
