@@ -105,6 +105,8 @@ type Guard {
 
 type OCRResult {
   suggestedName: String
+  suggestedTowerName: String
+  suggestedUnitNumber: String
   suggestedTrackingNumber: String
   suggestedCarrier: String
   rawText: String

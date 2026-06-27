@@ -1,26 +1,32 @@
 /**
  * PackTrack — processLabel Lambda Handler
  *
- * Processes a package label photo using AWS Textract to extract:
+ * Processes a package label photo using Amazon Rekognition (DetectText) to
+ * extract:
  * - Recipient name (suggested)
+ * - Tower + unit/department (suggested)
  * - Tracking number (suggested)
  * - Carrier (detected)
  * - Raw OCR text
  * - Confidence score
  *
+ * Rekognition is used instead of Textract because Textract is not enabled on
+ * this account. DetectText reads text lines from the label image just as well
+ * for this use case.
+ *
  * The photo must already be uploaded to the PackTrack S3 bucket
  * (via the getUploadUrl → presigned PUT flow).
  */
 import {
-  TextractClient,
-  DetectDocumentTextCommand,
-  type Block,
-} from "@aws-sdk/client-textract";
+  RekognitionClient,
+  DetectTextCommand,
+  type TextDetection,
+} from "@aws-sdk/client-rekognition";
 import { BUCKET_NAME } from "../shared/constants.js";
 import type { AppSyncResolverEvent } from "../shared/types.js";
 import { ValidationError } from "../shared/errors.js";
 
-const textract = new TextractClient({});
+const rekognition = new RekognitionClient({});
 
 // ─── Carrier Detection ───────────────────────────────────────────────────────
 
@@ -119,10 +125,10 @@ export const handler = async (
     throw new ValidationError("s3Key is required");
   }
 
-  // ── Call Textract ──────────────────────────────────────────────────────────
-  const textractResult = await textract.send(
-    new DetectDocumentTextCommand({
-      Document: {
+  // ── Call Rekognition DetectText ────────────────────────────────────────────
+  const result = await rekognition.send(
+    new DetectTextCommand({
+      Image: {
         S3Object: {
           Bucket: BUCKET_NAME,
           Name: s3Key,
@@ -131,23 +137,19 @@ export const handler = async (
     }),
   );
 
-  const blocks: Block[] = textractResult.Blocks ?? [];
+  const detections: TextDetection[] = result.TextDetections ?? [];
 
   // ── Extract raw text lines ─────────────────────────────────────────────────
-  const lines: string[] = blocks
-    .filter((b) => b.BlockType === "LINE" && b.Text)
-    .map((b) => b.Text!);
+  const lineDetections = detections.filter((d) => d.Type === "LINE" && d.DetectedText);
+  const lines: string[] = lineDetections.map((d) => d.DetectedText!);
 
   const rawText = lines.join("\n");
 
-  // Average confidence across all word blocks
-  const wordBlocks = blocks.filter(
-    (b) => b.BlockType === "WORD" && b.Confidence !== undefined,
-  );
+  // Average confidence across detected lines (Rekognition reports 0–100)
   const avgConfidence =
-    wordBlocks.length > 0
-      ? wordBlocks.reduce((sum, b) => sum + (b.Confidence ?? 0), 0) /
-        wordBlocks.length /
+    lineDetections.length > 0
+      ? lineDetections.reduce((sum, d) => sum + (d.Confidence ?? 0), 0) /
+        lineDetections.length /
         100
       : 0;
 
@@ -187,11 +189,41 @@ export const handler = async (
   // ── Extract recipient name ─────────────────────────────────────────────────
   const suggestedName = extractRecipientName(lines);
 
+  // ── Extract tower + unit/department (more reliable than the name) ──────────
+  const { suggestedTowerName, suggestedUnitNumber } = extractLocation(rawText);
+
   return {
     suggestedName,
+    suggestedTowerName,
+    suggestedUnitNumber,
     suggestedTrackingNumber,
     suggestedCarrier,
     rawText,
     confidence: Math.round(avgConfidence * 100) / 100,
   };
 };
+
+/**
+ * Pulls the tower name and unit/department number out of an address line such as
+ * "Torre Dublin, Depto. 1003" or "Depto 1003" or "Dpto. 4B".
+ */
+function extractLocation(text: string): {
+  suggestedTowerName: string | null;
+  suggestedUnitNumber: string | null;
+} {
+  let suggestedUnitNumber: string | null = null;
+  let suggestedTowerName: string | null = null;
+
+  const unitMatch =
+    text.match(/\b(?:depto|dpto|depart(?:amento)?|unidad|interior|int)\.?\s*#?\s*([0-9]{1,5}[a-z]?)/i) ||
+    text.match(/#\s*([0-9]{1,5}[a-z]?)\b/i);
+  if (unitMatch) suggestedUnitNumber = unitMatch[1].toUpperCase();
+
+  const towerMatch = text.match(/\btorre\s+([a-záéíóúñ0-9]+)/i);
+  if (towerMatch) {
+    const t = towerMatch[1];
+    suggestedTowerName = t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
+  }
+
+  return { suggestedTowerName, suggestedUnitNumber };
+}

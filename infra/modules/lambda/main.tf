@@ -132,9 +132,10 @@ resource "aws_iam_role_policy" "s3" {
   })
 }
 
-# Textract access (for OCR label processing)
-resource "aws_iam_role_policy" "textract" {
-  name = "${var.project}-${var.environment}-lambda-textract"
+# Rekognition access (for OCR label processing — Textract is not enabled on
+# this account, Rekognition DetectText reads label text just as well)
+resource "aws_iam_role_policy" "ocr" {
+  name = "${var.project}-${var.environment}-lambda-ocr"
   role = aws_iam_role.lambda.id
 
   policy = jsonencode({
@@ -143,8 +144,7 @@ resource "aws_iam_role_policy" "textract" {
       {
         Effect = "Allow"
         Action = [
-          "textract:DetectDocumentText",
-          "textract:AnalyzeDocument",
+          "rekognition:DetectText",
         ]
         Resource = "*"
       }
