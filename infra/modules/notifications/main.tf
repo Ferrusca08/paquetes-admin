@@ -20,6 +20,14 @@ resource "aws_iam_role_policy" "sns_publish" {
         Effect   = "Allow"
         Action   = "sns:Publish"
         Resource = var.topic_arn
+      },
+      {
+        # SMS publishes go directly to a phone number (no topic ARN), so the
+        # resource cannot be scoped beyond "*".
+        Sid      = "PublishSmsToPhoneNumbers"
+        Effect   = "Allow"
+        Action   = "sns:Publish"
+        Resource = "*"
       }
     ]
   })
@@ -36,7 +44,7 @@ data "archive_file" "send_notification" {
 
 resource "aws_lambda_function" "send_notification" {
   function_name = "${var.project}-${var.environment}-send-notification"
-  description   = "Sends push notification + WhatsApp (DEMO) when a package is registered"
+  description   = "Sends push notification + SMS when a package is registered"
   role          = var.lambda_role_arn
   handler       = "index.handler"
   runtime       = "nodejs20.x"
@@ -50,7 +58,7 @@ resource "aws_lambda_function" "send_notification" {
   environment {
     variables = {
       TABLE_NAME     = var.dynamodb_table_name
-      WHATSAPP_MODE  = "DEMO"
+      SMS_ENABLED    = "true"
       AWS_NODEJS_CONNECTION_REUSE_ENABLED = "1"
     }
   }

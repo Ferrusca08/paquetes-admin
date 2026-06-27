@@ -4,14 +4,19 @@
  * Triggered by SNS when a package is registered.
  * 1. Fetches the resident record to get pushToken and phone
  * 2. Sends Expo push notification (if pushToken is registered)
- * 3. Logs WhatsApp message in DEMO_MODE (no real Meta API call)
+ * 3. Sends an SMS via Amazon SNS (if the resident has a phone)
  */
 import { GetCommand } from "@aws-sdk/lib-dynamodb";
+import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
 import { docClient } from "../shared/dynamo-client.js";
 import { TABLE_NAME, PK, SK } from "../shared/constants.js";
 import type { ResidentItem } from "../shared/types.js";
 
-const WHATSAPP_MODE = process.env.WHATSAPP_MODE ?? "DEMO";
+const SMS_ENABLED = (process.env.SMS_ENABLED ?? "true") === "true";
+// Optional alphanumeric sender ID. Not supported in every country (e.g. US);
+// in Mexico it requires registration with AWS. Empty → SNS uses a long code.
+const SMS_SENDER_ID = process.env.SMS_SENDER_ID || "";
+const sns = new SNSClient({ region: process.env.AWS_REGION || "us-east-1" });
 
 interface SNSRecord {
   Sns: { Message: string };
@@ -91,16 +96,44 @@ async function processNotification(pkg: PackageRegisteredEvent): Promise<void> {
     console.log(`[notify] No push token for resident ${pkg.residentId} — skipping push`);
   }
 
-  // ── WhatsApp (DEMO_MODE) ─────────────────────────────────────────────────
-  if (WHATSAPP_MODE === "DEMO") {
-    const phone = resident.phone ?? "(sin teléfono)";
-    const waMessage =
-      `Hola ${resident.fullName}! 📦 Tu paquete llegó al edificio.\n\n` +
-      `${locationLine ? locationLine + "\n" : ""}` +
-      `Código de retiro: *${pkg.pickupCode}*\n\n` +
-      `Preséntate en recepción para recogerlo.`;
-    console.log("[WHATSAPP DEMO]", JSON.stringify({ to: phone, message: waMessage }, null, 2));
-    // Production: POST to https://graph.facebook.com/v19.0/{phone-number-id}/messages
+  // ── SMS (Amazon SNS) ─────────────────────────────────────────────────────
+  if (SMS_ENABLED && resident.phone) {
+    const firstName = resident.fullName.split(" ")[0];
+    const smsLoc = locationLine ? ` (${locationLine})` : "";
+    // Kept ASCII / accent-free so it fits in a single GSM-7 segment (cheaper).
+    const smsMessage = `PackTrack: Hola ${firstName}, llego tu paquete${smsLoc}. Codigo de retiro: ${pkg.pickupCode}`;
+    await sendSms(resident.phone, smsMessage);
+  } else if (!resident.phone) {
+    console.log(`[notify] No phone for resident ${pkg.residentId} — skipping SMS`);
+  }
+}
+
+async function sendSms(phone: string, message: string): Promise<void> {
+  if (!/^\+\d{8,15}$/.test(phone)) {
+    console.warn(`[notify] Phone not in E.164 format, skipping SMS: ${phone}`);
+    return;
+  }
+  try {
+    const messageAttributes: Record<string, { DataType: string; StringValue: string }> = {
+      // Transactional → highest delivery reliability (vs Promotional).
+      "AWS.SNS.SMS.SMSType": { DataType: "String", StringValue: "Transactional" },
+    };
+    if (SMS_SENDER_ID) {
+      messageAttributes["AWS.SNS.SMS.SenderID"] = {
+        DataType: "String",
+        StringValue: SMS_SENDER_ID,
+      };
+    }
+    const res = await sns.send(
+      new PublishCommand({
+        PhoneNumber: phone,
+        Message: message,
+        MessageAttributes: messageAttributes,
+      }),
+    );
+    console.log(`[notify] SMS sent to ${phone}:`, res.MessageId);
+  } catch (err) {
+    console.error("[notify] SMS send failed:", err);
   }
 }
 
