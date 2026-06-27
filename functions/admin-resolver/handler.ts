@@ -117,34 +117,7 @@ async function listBuildings(
   event: AppSyncResolverEvent<{ limit?: number; nextToken?: string }>,
 ) {
   const { limit = 50, nextToken } = event.arguments;
-  // Scan for all buildings (entityType = BUILDING). For small datasets this is fine.
-  const result = await docClient.send(
-    new QueryCommand({
-      TableName: TABLE_NAME,
-      // Use a scan with filter since buildings don't share a common PK
-      // For MVP with few buildings this is acceptable
-      IndexName: undefined,
-      KeyConditionExpression: undefined as unknown as string,
-      FilterExpression: "entityType = :et",
-      ExpressionAttributeValues: { ":et": "BUILDING" },
-      Limit: limit,
-      ...(nextToken
-        ? { ExclusiveStartKey: JSON.parse(Buffer.from(nextToken, "base64url").toString()) }
-        : {}),
-    }).catch(() => {
-      // Fallback: scan
-      return docClient.send(
-        new QueryCommand({
-          TableName: TABLE_NAME,
-          KeyConditionExpression: "begins_with(PK, :prefix)",
-          ExpressionAttributeValues: { ":prefix": "BLDG#" },
-        } as never),
-      );
-    }),
-  );
-
-  // Since we can't query across partition keys, we'll use a simple scan approach
-  // This is OK for MVP with <100 buildings
+  // Scan for all building META records. OK for MVP with <100 buildings.
   const { ScanCommand } = await import("@aws-sdk/lib-dynamodb");
   const scanResult = await docClient.send(
     new ScanCommand({
