@@ -88,9 +88,9 @@ export const handler = async (
         ":updatedAt": deliveredAt,
         ":gsi2pk": newGsi2Keys.gsi2pk,
         ":gsi2sk": newGsi2Keys.gsi2sk,
-        ...(input.evidencePhotoKey
-          ? { ":evidencePhotoKey": input.evidencePhotoKey }
-          : {}),
+        // Guards against a race that double-delivers a package. The evidence
+        // photo, if any, is written in the separate update below.
+        ":alreadyDelivered": PackageStatus.ENTREGADO,
       },
       ConditionExpression: "#status <> :alreadyDelivered",
       ReturnValues: "ALL_NEW",
