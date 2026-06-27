@@ -13,6 +13,17 @@ const PACKAGE_FIELDS = /* GraphQL */ `
   notifiedAt createdAt updatedAt expiresAt
 `;
 
+// Same as PACKAGE_FIELDS but WITHOUT pickupCode — the pickup code must only
+// ever reach the resident, never the guard's browseable lists.
+const GUARD_PACKAGE_FIELDS = /* GraphQL */ `
+  id buildingId towerId unitId residentId
+  residentName towerName unitNumber
+  status carrier trackingNumber
+  labelPhotoKey evidencePhotoKey
+  registeredBy deliveredBy deliveredAt
+  notifiedAt createdAt updatedAt expiresAt
+`;
+
 // ─── Queries ─────────────────────────────────────────────────
 
 export const listPackagesByStatus = /* GraphQL */ `
@@ -28,7 +39,7 @@ export const listPackagesByStatus = /* GraphQL */ `
       limit: $limit
       nextToken: $nextToken
     ) {
-      items { ${PACKAGE_FIELDS} }
+      items { ${GUARD_PACKAGE_FIELDS} }
       nextToken
     }
   }
@@ -94,7 +105,7 @@ export const listBuildings = /* GraphQL */ `
 export const registerPackage = /* GraphQL */ `
   mutation RegisterPackage($input: RegisterPackageInput!) {
     registerPackage(input: $input) {
-      ${PACKAGE_FIELDS}
+      ${GUARD_PACKAGE_FIELDS}
     }
   }
 `;
@@ -102,7 +113,7 @@ export const registerPackage = /* GraphQL */ `
 export const confirmPickup = /* GraphQL */ `
   mutation ConfirmPickup($input: ConfirmPickupInput!) {
     confirmPickup(input: $input) {
-      ${PACKAGE_FIELDS}
+      ${GUARD_PACKAGE_FIELDS}
     }
   }
 `;
@@ -110,7 +121,7 @@ export const confirmPickup = /* GraphQL */ `
 export const markPackageReturned = /* GraphQL */ `
   mutation MarkPackageReturned($buildingId: ID!, $packageId: ID!) {
     markPackageReturned(buildingId: $buildingId, packageId: $packageId) {
-      ${PACKAGE_FIELDS}
+      ${GUARD_PACKAGE_FIELDS}
     }
   }
 `;

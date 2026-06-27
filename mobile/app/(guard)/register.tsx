@@ -11,6 +11,7 @@ import {
   Image,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { Feather } from '@expo/vector-icons';
 import { generateClient } from 'aws-amplify/api';
 import { useAuth } from '../../lib/hooks/useAuth';
 import {
@@ -270,12 +271,12 @@ export default function RegisterPackageScreen() {
           },
         },
       });
-      const pkg = (result as { data: { registerPackage: { pickupCode: string; residentName: string } } })
+      const pkg = (result as { data: { registerPackage: { residentName: string } } })
         .data.registerPackage;
 
       Alert.alert(
-        '✅ Paquete registrado',
-        `Residente: ${pkg.residentName}\n\nCódigo de retiro:\n\n${pkg.pickupCode}`,
+        'Paquete registrado',
+        `Residente: ${pkg.residentName}\n\nEl código de retiro se le envió al residente. El guardia no lo ve por seguridad.`,
         [{ text: 'Listo', onPress: resetForm }],
       );
     } catch (e) {
@@ -326,7 +327,7 @@ export default function RegisterPackageScreen() {
         </View>
       ) : (
         <TouchableOpacity style={styles.photoPlaceholder} onPress={pickPhoto} activeOpacity={0.7}>
-          <Text style={styles.photoIcon}>📷</Text>
+          <Feather name="camera" size={36} color={colors.gray400} style={styles.photoIcon} />
           <Text style={styles.photoText}>Tomar foto de etiqueta</Text>
           <Text style={styles.photoSubtext}>El OCR detecta al residente y los datos del paquete</Text>
         </TouchableOpacity>
@@ -370,7 +371,7 @@ export default function RegisterPackageScreen() {
 
       {selectedResident && (
         <View style={styles.selectedCard}>
-          <Text style={styles.selectedName}>✓ {selectedResident.fullName}</Text>
+          <Text style={styles.selectedName}><Feather name="check" size={14} color={colors.primaryDark} /> {selectedResident.fullName}</Text>
           <Text style={styles.selectedUnit}>
             {[selectedResident.towerName, selectedResident.unitNumber ? `Depto ${selectedResident.unitNumber}` : ''].filter(Boolean).join(' · ')}
           </Text>

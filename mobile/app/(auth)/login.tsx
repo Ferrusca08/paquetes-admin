@@ -11,6 +11,7 @@ import {
   Alert,
 } from 'react-native';
 import { signIn } from 'aws-amplify/auth';
+import { Feather } from '@expo/vector-icons';
 import { colors, spacing, fontSize, radius } from '../../lib/theme';
 
 export default function LoginScreen() {
@@ -51,7 +52,7 @@ export default function LoginScreen() {
       <View style={styles.inner}>
         {/* Logo / branding */}
         <View style={styles.header}>
-          <Text style={styles.logo}>📦</Text>
+          <Feather name="package" size={56} color={colors.primary} style={styles.logo} />
           <Text style={styles.title}>PackTrack</Text>
           <Text style={styles.subtitle}>Gestión de paquetes residencial</Text>
         </View>

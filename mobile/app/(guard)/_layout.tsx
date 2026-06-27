@@ -1,5 +1,6 @@
 import { Tabs } from 'expo-router';
 import { TouchableOpacity, Text, StyleSheet, Alert } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { useAuth } from '../../lib/hooks/useAuth';
 import { colors, fontSize } from '../../lib/theme';
 
@@ -33,7 +34,7 @@ export default function GuardLayout() {
         options={{
           title: 'Paquetes',
           tabBarLabel: 'Paquetes',
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>📦</Text>,
+          tabBarIcon: ({ color }) => <Feather name="package" size={20} color={color} />,
           headerTitle: `Paquetes — ${user?.buildingId ? '' : 'Sin edificio'}`,
         }}
       />
@@ -42,7 +43,7 @@ export default function GuardLayout() {
         options={{
           title: 'Registrar',
           tabBarLabel: 'Registrar',
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>➕</Text>,
+          tabBarIcon: ({ color }) => <Feather name="plus-circle" size={20} color={color} />,
         }}
       />
       <Tabs.Screen
@@ -50,7 +51,15 @@ export default function GuardLayout() {
         options={{
           title: 'Retiro',
           tabBarLabel: 'Retiro',
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>✅</Text>,
+          tabBarIcon: ({ color }) => <Feather name="check-circle" size={20} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="history"
+        options={{
+          title: 'Historial',
+          tabBarLabel: 'Historial',
+          tabBarIcon: ({ color }) => <Feather name="clock" size={20} color={color} />,
         }}
       />
     </Tabs>

@@ -1,5 +1,6 @@
 import { Tabs } from 'expo-router';
 import { TouchableOpacity, Text, StyleSheet, Alert } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { useAuth } from '../../lib/hooks/useAuth';
 import { colors, fontSize } from '../../lib/theme';
 
@@ -33,7 +34,15 @@ export default function ResidentLayout() {
         options={{
           title: 'Mis paquetes',
           tabBarLabel: 'Mis paquetes',
-          tabBarIcon: ({ color }) => <Text style={{ fontSize: 20, color }}>📦</Text>,
+          tabBarIcon: ({ color }) => <Feather name="package" size={20} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="history"
+        options={{
+          title: 'Historial',
+          tabBarLabel: 'Historial',
+          tabBarIcon: ({ color }) => <Feather name="clock" size={20} color={color} />,
         }}
       />
       <Tabs.Screen

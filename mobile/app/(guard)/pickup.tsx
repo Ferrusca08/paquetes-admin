@@ -11,6 +11,7 @@ import {
   Image,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { Feather } from '@expo/vector-icons';
 import { generateClient } from 'aws-amplify/api';
 import { useAuth } from '../../lib/hooks/useAuth';
 import {
@@ -139,7 +140,7 @@ export default function PickupScreen() {
                   },
                 },
               });
-              Alert.alert('✅ Retiro confirmado', `Paquete de ${pkg.residentName} entregado exitosamente.`,
+              Alert.alert('Retiro confirmado', `Paquete de ${pkg.residentName} entregado exitosamente.`,
                 [{ text: 'OK', onPress: resetForm }]);
             } catch {
               Alert.alert('Error', 'No se pudo confirmar el retiro. Verifica el código.');
@@ -242,7 +243,7 @@ export default function PickupScreen() {
             </View>
           ) : (
             <TouchableOpacity style={styles.photoPlaceholder} onPress={pickEvidence} activeOpacity={0.7}>
-              <Text style={styles.photoIcon}>📸</Text>
+              <Feather name="camera" size={32} color={colors.gray500} style={styles.photoIcon} />
               <Text style={styles.photoText}>Tomar foto de evidencia</Text>
             </TouchableOpacity>
           )}
@@ -256,7 +257,7 @@ export default function PickupScreen() {
           >
             {confirming
               ? <ActivityIndicator color={colors.white} />
-              : <Text style={styles.confirmButtonText}>✅ Confirmar retiro</Text>}
+              : <Text style={styles.confirmButtonText}><Feather name="check" size={16} color={colors.white} /> Confirmar retiro</Text>}
           </TouchableOpacity>
         </>
       )}

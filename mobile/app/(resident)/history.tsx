@@ -32,7 +32,7 @@ type Package = {
 
 const client = generateClient();
 
-export default function MyPackagesScreen() {
+export default function ResidentHistoryScreen() {
   const { user } = useAuth();
   const router = useRouter();
   const [packages, setPackages] = useState<Package[]>([]);
@@ -44,15 +44,16 @@ export default function MyPackagesScreen() {
     try {
       const result = await client.graphql({
         query: listMyPackages,
-        variables: { residentId: user.residentId, limit: 30 },
+        variables: { residentId: user.residentId, limit: 100 },
       });
       const items = (result as { data: { listMyPackages: { items: Package[] } } })
         .data.listMyPackages.items;
-      // "Mis paquetes" shows only what's still pending pickup; the full list
-      // lives in the Historial tab.
-      setPackages(items.filter((p) => p.status === 'RECIBIDO' || p.status === 'NOTIFICADO'));
+      const sorted = [...items].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      );
+      setPackages(sorted);
     } catch {
-      Alert.alert('Error', 'No se pudieron cargar tus paquetes');
+      Alert.alert('Error', 'No se pudo cargar tu historial');
     }
   }, [user?.residentId]);
 
@@ -72,55 +73,54 @@ export default function MyPackagesScreen() {
       <View style={styles.center}>
         <Feather name="user" size={48} color={colors.gray400} style={styles.emptyIcon} />
         <Text style={styles.emptyTitle}>Perfil no vinculado</Text>
-        <Text style={styles.emptyText}>
-          Pide al administrador que vincule tu cuenta con tu perfil de residente.
-        </Text>
+      </View>
+    );
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      {loading ? (
+    <FlatList
+      style={styles.container}
+      data={packages}
+      keyExtractor={(item) => item.id}
+      contentContainerStyle={packages.length === 0 ? styles.centerContent : styles.list}
+      refreshControl={
+        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+      }
+      ListEmptyComponent={
         <View style={styles.center}>
-          <ActivityIndicator size="large" color={colors.primary} />
+          <Feather name="inbox" size={48} color={colors.gray400} style={styles.emptyIcon} />
+          <Text style={styles.emptyTitle}>Sin historial</Text>
+          <Text style={styles.emptyText}>Aquí verás todos tus paquetes, incluidos los ya entregados.</Text>
         </View>
-      ) : (
-        <FlatList
-          data={packages}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={packages.length === 0 ? styles.centerContent : styles.list}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
-          ListEmptyComponent={
-            <View style={styles.center}>
-              <Feather name="inbox" size={48} color={colors.gray400} style={styles.emptyIcon} />
-              <Text style={styles.emptyTitle}>Nada por recoger</Text>
-              <Text style={styles.emptyText}>No tienes paquetes pendientes. Revisa tu Historial para ver los anteriores.</Text>
-            </View>
-          }
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => router.push(`/(resident)/${item.id}?buildingId=${item.buildingId}`)}
-            >
-              <ResidentPackageCard pkg={item} />
-            </TouchableOpacity>
-          )}
-        />
+      }
+      renderItem={({ item }) => (
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => router.push(`/(resident)/${item.id}?buildingId=${item.buildingId}`)}
+        >
+          <HistoryCard pkg={item} />
+        </TouchableOpacity>
       )}
-    </View>
+    />
   );
 }
 
-function ResidentPackageCard({ pkg }: { pkg: Package }) {
+function HistoryCard({ pkg }: { pkg: Package }) {
   const cfg = statusConfig[pkg.status] ?? statusConfig.RECIBIDO;
-  const date = new Date(pkg.createdAt).toLocaleDateString('es-MX', {
-    day: '2-digit', month: 'short',
-  });
   const isPending = pkg.status === 'RECIBIDO' || pkg.status === 'NOTIFICADO';
-
+  const date = new Date(pkg.deliveredAt ?? pkg.createdAt).toLocaleDateString('es-MX', {
+    day: '2-digit', month: 'short', year: 'numeric',
+  });
   return (
-    <View style={[styles.card, isPending && styles.cardPending]}>
+    <View style={styles.card}>
       <View style={styles.cardLeft}>
         <View style={[styles.badge, { backgroundColor: cfg.bg }]}>
           <Text style={[styles.badgeText, { color: cfg.color }]}>{cfg.label}</Text>
@@ -129,13 +129,14 @@ function ResidentPackageCard({ pkg }: { pkg: Package }) {
         {pkg.trackingNumber && (
           <Text style={styles.tracking} numberOfLines={1}>{pkg.trackingNumber}</Text>
         )}
-        <Text style={styles.date}>{date}</Text>
+        <Text style={styles.date}>
+          {pkg.deliveredAt ? `Entregado · ${date}` : `Recibido · ${date}`}
+        </Text>
       </View>
       {isPending && (
         <View style={styles.cardRight}>
           <Text style={styles.codeLabel}>Código</Text>
           <Text style={styles.code}>{pkg.pickupCode}</Text>
-          <Text style={styles.chevron}>›</Text>
         </View>
       )}
     </View>
@@ -145,14 +146,13 @@ function ResidentPackageCard({ pkg }: { pkg: Package }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.gray50 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
-  centerContent: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
+  centerContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
   list: { padding: spacing.md, gap: spacing.sm },
   card: {
     backgroundColor: colors.white, borderRadius: radius.md,
     padding: spacing.md, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     shadowColor: colors.black, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2,
   },
-  cardPending: { borderLeftWidth: 3, borderLeftColor: colors.primary },
   cardLeft: { flex: 1 },
   badge: { borderRadius: radius.full, paddingHorizontal: 10, paddingVertical: 3, alignSelf: 'flex-start', marginBottom: 6 },
   badgeText: { fontSize: fontSize.xs, fontWeight: '600' },
@@ -162,7 +162,6 @@ const styles = StyleSheet.create({
   cardRight: { alignItems: 'center', marginLeft: spacing.md },
   codeLabel: { fontSize: fontSize.xs, color: colors.gray500 },
   code: { fontSize: fontSize.lg, fontWeight: '800', color: colors.primary, letterSpacing: 2 },
-  chevron: { fontSize: 20, color: colors.gray400, marginTop: 4 },
   emptyIcon: { fontSize: 48, marginBottom: spacing.md },
   emptyTitle: { fontSize: fontSize.lg, fontWeight: '600', color: colors.gray700, marginBottom: spacing.sm },
   emptyText: { fontSize: fontSize.base, color: colors.gray500, textAlign: 'center' },

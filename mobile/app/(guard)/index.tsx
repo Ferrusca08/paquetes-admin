@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 import { generateClient } from 'aws-amplify/api';
 import { useAuth } from '../../lib/hooks/useAuth';
 import { listPackagesByStatus } from '../../lib/graphql/operations';
@@ -22,7 +23,6 @@ type Package = {
   status: keyof typeof statusConfig;
   carrier?: string;
   trackingNumber?: string;
-  pickupCode: string;
   createdAt: string;
 };
 
@@ -65,7 +65,7 @@ export default function PackageListScreen() {
   if (!user?.buildingId) {
     return (
       <View style={styles.center}>
-        <Text style={styles.emptyIcon}>🏢</Text>
+        <Feather name="home" size={48} color={colors.gray400} style={styles.emptyIcon} />
         <Text style={styles.emptyTitle}>Sin edificio asignado</Text>
         <Text style={styles.emptyText}>
           Pide al administrador que asigne tu edificio en Cognito.
@@ -104,7 +104,7 @@ export default function PackageListScreen() {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
           ListEmptyComponent={
             <View style={styles.center}>
-              <Text style={styles.emptyIcon}>📭</Text>
+              <Feather name="inbox" size={48} color={colors.gray400} style={styles.emptyIcon} />
               <Text style={styles.emptyTitle}>Sin paquetes</Text>
               <Text style={styles.emptyText}>
                 No hay paquetes con estado "{statusConfig[activeTab].label}".
@@ -145,7 +145,7 @@ function PackageCard({ pkg }: { pkg: Package }) {
       )}
 
       <View style={styles.cardFooter}>
-        <Text style={styles.code}>Código: <Text style={styles.codeValue}>{pkg.pickupCode}</Text></Text>
+        <Text style={styles.codeHint}><Feather name="lock" size={11} color={colors.gray400} /> Código solo visible para el residente</Text>
         <Text style={styles.date}>{date}</Text>
       </View>
     </View>
@@ -198,8 +198,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.gray100,
   },
-  code: { fontSize: fontSize.sm, color: colors.gray600 },
-  codeValue: { fontWeight: '700', color: colors.primary, letterSpacing: 1 },
+  codeHint: { fontSize: fontSize.xs, color: colors.gray400, fontStyle: 'italic', flex: 1 },
   date: { fontSize: fontSize.xs, color: colors.gray400 },
   emptyIcon: { fontSize: 48, marginBottom: spacing.md },
   emptyTitle: { fontSize: fontSize.lg, fontWeight: '600', color: colors.gray700, marginBottom: spacing.sm },
