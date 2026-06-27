@@ -139,6 +139,7 @@
         <div class="nav-item active" data-view="overview"><span class="ico">📊</span> Resumen</div>
         <div class="nav-item" data-view="packages"><span class="ico">📦</span> Paquetes</div>
         <div class="nav-item" data-view="residents"><span class="ico">👥</span> Residentes</div>
+        <div class="nav-item" data-view="guards"><span class="ico">🛡️</span> Guardias</div>
         <div class="nav-item" data-view="buildings"><span class="ico">🏢</span> Edificios</div>
       </nav>
       <div class="foot">PackTrack Admin · dev<br/>v1.0</div>
@@ -196,6 +197,7 @@ const S = {
   towers: [],
   units: [],
   residents: [],
+  guards: [],
   view: "overview",
 };
 
@@ -248,6 +250,7 @@ const Q = {
   listTowers: `query($b:ID!){ listTowers(buildingId:$b,limit:200){ items{ id name buildingId } } }`,
   listUnits: `query($b:ID!){ listUnits(buildingId:$b,limit:500){ items{ id number towerId towerName } } }`,
   listResidents: `query($b:ID!){ listResidents(buildingId:$b,limit:500){ items{ id fullName phone email towerName unitNumber towerId unitId createdAt } } }`,
+  listGuards: `query($b:ID!){ listGuards(buildingId:$b){ items{ id fullName email phone status createdAt } } }`,
   listPackages: `query($b:ID!,$s:PackageStatus!){ listPackagesByStatus(buildingId:$b,status:$s,limit:200){ items{ id residentName towerName unitNumber carrier trackingNumber pickupCode status createdAt deliveredAt } } }`,
 };
 const M = {
@@ -259,6 +262,8 @@ const M = {
   createResident: `mutation($i:CreateResidentInput!){ createResident(input:$i){ id } }`,
   updateResident: `mutation($i:UpdateResidentInput!){ updateResident(input:$i){ id } }`,
   deleteResident: `mutation($b:ID!,$r:ID!){ deleteResident(buildingId:$b,residentId:$r) }`,
+  createGuard: `mutation($i:CreateGuardInput!){ createGuard(input:$i){ id fullName } }`,
+  deleteGuard: `mutation($u:String!){ deleteGuard(username:$u) }`,
 };
 
 /* ============================================================
@@ -286,15 +291,17 @@ async function loadBuildings(){
   if(!S.building && S.buildings.length) S.building = S.buildings[0].id;
 }
 async function loadBuildingData(){
-  if(!S.building){ S.towers=[];S.units=[];S.residents=[]; return; }
-  const [t,u,r] = await Promise.all([
+  if(!S.building){ S.towers=[];S.units=[];S.residents=[];S.guards=[]; return; }
+  const [t,u,r,g] = await Promise.all([
     gql(Q.listTowers,{b:S.building}),
     gql(Q.listUnits,{b:S.building}),
     gql(Q.listResidents,{b:S.building}),
+    gql(Q.listGuards,{b:S.building}).catch(()=>({listGuards:{items:[]}})),
   ]);
   S.towers = t.listTowers.items||[];
   S.units = u.listUnits.items||[];
   S.residents = r.listResidents.items||[];
+  S.guards = g.listGuards.items||[];
 }
 
 /* ============================================================
@@ -312,6 +319,7 @@ async function render(){
   if(S.view==="overview") return renderOverview();
   if(S.view==="packages") return renderPackages();
   if(S.view==="residents") return renderResidents();
+  if(S.view==="guards") return renderGuards();
   if(S.view==="buildings") return renderBuildings();
 }
 
@@ -331,7 +339,7 @@ async function renderOverview(){
     <div class="stats">
       <div class="stat"><div class="lbl">🏢 Edificios</div><div class="val">${S.buildings.length}</div></div>
       <div class="stat"><div class="lbl">👥 Residentes</div><div class="val">${S.residents.length}</div></div>
-      <div class="stat"><div class="lbl">🏗️ Torres</div><div class="val">${S.towers.length}</div></div>
+      <div class="stat"><div class="lbl">🛡️ Guardias</div><div class="val">${S.guards.length}</div></div>
       <div class="stat"><div class="lbl">📦 Paquetes</div><div class="val">${totalPkg}</div></div>
     </div>
     <div class="card">
@@ -377,10 +385,14 @@ async function renderResidents(){
   if(!S.building){ return emptyState("👥","Selecciona un edificio"); }
   $("#content").innerHTML = `
     <div class="page-title">Residentes</div>
-    <div class="page-sub">${S.residents.length} residentes registrados</div>
+    <div class="page-sub">${S.residents.length} residentes registrados · al crear uno con email se le envía invitación para entrar a la app</div>
     <div class="card">
       <div class="card-head"><h3>Lista de residentes</h3>
-        <button class="btn btn-sm" onclick="residentForm()">+ Nuevo residente</button></div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm" onclick="$('#csvInput').click()">⬆ Importar CSV</button>
+          <button class="btn btn-sm" onclick="residentForm()">+ Nuevo residente</button>
+        </div></div>
+      <input type="file" id="csvInput" accept=".csv,text/csv" style="display:none" onchange="onCsvSelected(event)" />
       <div class="card-body">
         ${S.residents.length? `<table>
           <thead><tr><th>Nombre</th><th>Ubicación</th><th>Contacto</th><th></th></tr></thead>
@@ -405,27 +417,171 @@ function residentForm(r){
     ${isEdit?"":`
     <div class="field"><label>Torre</label><select id="r_tower" onchange="fillUnits()">${towerOpts||'<option value="">— sin torres —</option>'}</select></div>
     <div class="field"><label>Unidad</label><select id="r_unit"></select></div>`}
-    <div class="field"><label>Email</label><input id="r_email" value="${esc(r.email||"")}" placeholder="correo@ejemplo.com"/></div>
-    <div class="field"><label>Teléfono</label><input id="r_phone" value="${esc(r.phone||"")}" placeholder="+52..."/></div>
+    <div class="field"><label>Email ${isEdit?"":"(crea su acceso a la app)"}</label><input id="r_email" type="email" value="${esc(r.email||"")}" placeholder="correo@ejemplo.com"/></div>
+    <div class="field"><label>Teléfono</label><input id="r_phone" value="${esc(r.phone||"")}" placeholder="+5215512345678"/>
+      <div class="muted" style="font-size:12px;margin-top:5px">Formato internacional con +52. ${isEdit?"":"Se le enviará una invitación por email."}</div></div>
   `, `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
       <button class="btn" id="r_save">Guardar</button>`);
   if(!isEdit) fillUnits();
   $("#r_save").onclick = async ()=>{
     const name=$("#r_name").value.trim();
+    const email=$("#r_email").value.trim();
     if(!name){ toast("El nombre es obligatorio","err"); return; }
+    if(!isEdit && !email){ toast("El email es obligatorio para crear el acceso","err"); return; }
     $("#r_save").disabled=true;
     try{
       if(isEdit){
-        await gql(M.updateResident,{i:{id:r.id,buildingId:S.building,fullName:name,email:$("#r_email").value.trim()||null,phone:$("#r_phone").value.trim()||null}});
+        await gql(M.updateResident,{i:{id:r.id,buildingId:S.building,fullName:name,email:email||null,phone:$("#r_phone").value.trim()||null}});
       }else{
         const towerId=$("#r_tower").value, unitId=$("#r_unit").value;
         if(!towerId||!unitId){ toast("Selecciona torre y unidad","err"); $("#r_save").disabled=false; return; }
-        await gql(M.createResident,{i:{buildingId:S.building,towerId,unitId,fullName:name,email:$("#r_email").value.trim()||null,phone:$("#r_phone").value.trim()||null}});
+        await gql(M.createResident,{i:{buildingId:S.building,towerId,unitId,fullName:name,email,phone:$("#r_phone").value.trim()||null}});
       }
-      closeModal(); toast("Residente guardado");
+      closeModal(); toast(isEdit?"Residente actualizado":"Residente creado e invitado");
       await loadBuildingData(); render();
     }catch(e){ toast(e.message,"err"); $("#r_save").disabled=false; }
   };
+}
+
+/* ---- CSV IMPORT (residentes) ---- */
+function parseCSV(text){
+  text = text.replace(/^﻿/,"").replace(/\r\n/g,"\n").replace(/\r/g,"\n");
+  // Detectar delimitador (coma o punto y coma)
+  const firstLine = text.split("\n")[0]||"";
+  const delim = (firstLine.split(";").length > firstLine.split(",").length) ? ";" : ",";
+  const rows=[]; let row=[], cur="", q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=c; }
+    else if(c==='"') q=true;
+    else if(c===delim){ row.push(cur); cur=""; }
+    else if(c==="\n"){ row.push(cur); rows.push(row); row=[]; cur=""; }
+    else cur+=c;
+  }
+  if(cur.length||row.length){ row.push(cur); rows.push(row); }
+  return rows.filter(r=>r.some(c=>c.trim()!==""));
+}
+function onCsvSelected(ev){
+  const file=ev.target.files[0]; ev.target.value="";
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=()=>csvPreview(parseCSV(reader.result));
+  reader.readAsText(file);
+}
+function norm(s){ return (s||"").toString().trim(); }
+function csvPreview(rows){
+  if(rows.length<2){ toast("CSV vacío o sin filas de datos","err"); return; }
+  // Mapear encabezados
+  const header = rows[0].map(h=>norm(h).toLowerCase());
+  const idx = (names)=> header.findIndex(h=> names.some(n=>h.includes(n)));
+  const iName=idx(["nombre","name","fullname"]), iTower=idx(["torre","tower"]),
+        iUnit=idx(["unidad","unit","depto","apto"]), iEmail=idx(["email","correo","mail"]),
+        iPhone=idx(["tel","phone","cel","celular"]);
+  if(iName<0||iEmail<0){ toast("El CSV debe tener al menos columnas de nombre y email","err"); return; }
+  const data = rows.slice(1).map(r=>({
+    fullName:norm(r[iName]), tower:iTower>=0?norm(r[iTower]):"",
+    unit:iUnit>=0?norm(r[iUnit]):"", email:iEmail>=0?norm(r[iEmail]):"",
+    phone:iPhone>=0?norm(r[iPhone]):"",
+  })).filter(d=>d.fullName&&d.email);
+  if(!data.length){ toast("No se encontraron filas válidas (nombre + email)","err"); return; }
+  window.__csvData=data;
+  openModal(`Importar ${data.length} residentes`, `
+    <div class="muted" style="margin-bottom:14px;font-size:13px">Se crearán residentes y su acceso a la app (invitación por email). Las torres y unidades que no existan se crean automáticamente.</div>
+    <div style="max-height:280px;overflow:auto;border:1px solid var(--border);border-radius:8px">
+      <table><thead><tr><th>Nombre</th><th>Torre</th><th>Unidad</th><th>Email</th></tr></thead>
+      <tbody>${data.slice(0,50).map(d=>`<tr><td>${esc(d.fullName)}</td><td class="muted">${esc(d.tower)}</td><td class="muted">${esc(d.unit)}</td><td class="muted">${esc(d.email)}</td></tr>`).join("")}</tbody></table>
+    </div>
+    ${data.length>50?`<div class="muted" style="font-size:12px;margin-top:8px">…y ${data.length-50} más</div>`:""}
+    <div id="csvProgress" style="margin-top:14px"></div>
+  `, `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn" id="csv_run">Importar ${data.length}</button>`);
+  $("#csv_run").onclick=runCsvImport;
+}
+async function runCsvImport(){
+  const data=window.__csvData||[];
+  $("#csv_run").disabled=true;
+  const prog=$("#csvProgress");
+  let ok=0, fail=0; const errors=[];
+  // Cachés locales mutables de torres/unidades
+  const towers=[...S.towers], units=[...S.units];
+  const findTower=(n)=> towers.find(t=>t.name.toLowerCase()===n.toLowerCase());
+  const findUnit=(tid,num)=> units.find(u=>u.towerId===tid && (u.number||"").toLowerCase()===num.toLowerCase());
+  for(let i=0;i<data.length;i++){
+    const d=data[i];
+    prog.innerHTML=`<div class="muted">Procesando ${i+1}/${data.length}… ✓${ok} ✗${fail}</div>`;
+    try{
+      let towerId=null, unitId=null;
+      if(d.tower){
+        let t=findTower(d.tower);
+        if(!t){ const res=await gql(M.createTower,{i:{buildingId:S.building,name:d.tower}}); t={id:res.createTower.id,name:d.tower}; towers.push(t); }
+        towerId=t.id;
+        const unitNum=d.unit||"S/N";
+        let u=findUnit(towerId,unitNum);
+        if(!u){ const res=await gql(M.createUnit,{i:{buildingId:S.building,towerId,number:unitNum}}); u={id:res.createUnit.id,towerId,number:unitNum}; units.push(u); }
+        unitId=u.id;
+      }
+      if(!towerId||!unitId){ throw new Error("Fila sin torre/unidad (se requiere para residentes)"); }
+      await gql(M.createResident,{i:{buildingId:S.building,towerId,unitId,fullName:d.fullName,email:d.email,phone:d.phone||null}});
+      ok++;
+    }catch(e){ fail++; errors.push(`${d.fullName}: ${e.message}`); }
+  }
+  prog.innerHTML=`<div style="font-weight:600;color:var(--green)">✓ ${ok} importados</div>${fail?`<div style="color:var(--red);font-size:13px;margin-top:6px">✗ ${fail} con error:<br/>${errors.slice(0,8).map(esc).join("<br/>")}</div>`:""}`;
+  $("#csv_run").textContent="Cerrar"; $("#csv_run").disabled=false;
+  $("#csv_run").onclick=async()=>{ closeModal(); await loadBuildingData(); render(); };
+}
+
+/* ---- GUARDS ---- */
+async function renderGuards(){
+  if(!S.building){ return emptyState("🛡️","Selecciona un edificio"); }
+  $("#content").innerHTML = `
+    <div class="page-title">Guardias</div>
+    <div class="page-sub">${S.guards.length} guardias · personal de vigilancia con acceso a la app</div>
+    <div class="card">
+      <div class="card-head"><h3>Lista de guardias</h3>
+        <button class="btn btn-sm" onclick="guardForm()">+ Nuevo guardia</button></div>
+      <div class="card-body">
+        ${S.guards.length? `<table>
+          <thead><tr><th>Nombre</th><th>Contacto</th><th>Estado</th><th></th></tr></thead>
+          <tbody>${S.guards.map(g=>`<tr>
+            <td><strong>${esc(g.fullName)}</strong></td>
+            <td>${esc(g.email||"—")}<br/><span class="muted" style="font-size:12px">${esc(g.phone||"")}</span></td>
+            <td>${guardStatus(g.status)}</td>
+            <td><div class="row-actions">
+              <button class="btn btn-danger btn-sm" onclick="delGuard('${esc(g.id)}','${esc(g.fullName)}')">Eliminar</button>
+            </div></td>
+          </tr>`).join("")}</tbody></table>` : emptyHtml("🛡️","Aún no hay guardias")}
+      </div>
+    </div>`;
+}
+function guardStatus(s){
+  if(s==="CONFIRMED") return `<span class="badge b-entregado"><span class="dot" style="background:var(--green)"></span>Activo</span>`;
+  if(s==="FORCE_CHANGE_PASSWORD") return `<span class="badge b-notificado"><span class="dot" style="background:var(--amber)"></span>Invitado</span>`;
+  return `<span class="badge b-devuelto">${esc(s||"—")}</span>`;
+}
+function guardForm(){
+  openModal("Nuevo guardia", `
+    <div class="muted" style="margin-bottom:14px;font-size:13px">Se creará su acceso a la app (grupo guardias) y se le enviará una invitación por email.</div>
+    <div class="field"><label>Nombre completo</label><input id="g_name" placeholder="Pedro Ramírez"/></div>
+    <div class="field"><label>Email (acceso a la app)</label><input id="g_email" type="email" placeholder="correo@ejemplo.com"/></div>
+    <div class="field"><label>Teléfono</label><input id="g_phone" placeholder="+5215512345678"/>
+      <div class="muted" style="font-size:12px;margin-top:5px">Formato internacional con +52.</div></div>
+  `, `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn" id="g_save">Crear guardia</button>`);
+  $("#g_save").onclick=async()=>{
+    const name=$("#g_name").value.trim(), email=$("#g_email").value.trim();
+    if(!name||!email){ toast("Nombre y email son obligatorios","err"); return; }
+    $("#g_save").disabled=true;
+    try{
+      await gql(M.createGuard,{i:{buildingId:S.building,fullName:name,email,phone:$("#g_phone").value.trim()||null}});
+      closeModal(); toast("Guardia creado e invitado");
+      await loadBuildingData(); render();
+    }catch(e){ toast(e.message,"err"); $("#g_save").disabled=false; }
+  };
+}
+async function delGuard(username,name){
+  if(!confirm(`¿Eliminar al guardia ${name}? Perderá acceso a la app.`)) return;
+  try{ await gql(M.deleteGuard,{u:username}); toast("Guardia eliminado"); await loadBuildingData(); render(); }
+  catch(e){ toast(e.message,"err"); }
 }
 function fillUnits(){
   const tw=$("#r_tower"); if(!tw) return;
