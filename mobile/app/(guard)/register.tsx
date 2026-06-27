@@ -15,6 +15,7 @@ import { generateClient } from 'aws-amplify/api';
 import { useAuth } from '../../lib/hooks/useAuth';
 import {
   searchResidents,
+  listResidents,
   getUploadUrl,
   processLabel,
   registerPackage,
@@ -32,6 +33,8 @@ type Resident = {
 
 type OCRResult = {
   suggestedName?: string;
+  suggestedTowerName?: string;
+  suggestedUnitNumber?: string;
   suggestedTrackingNumber?: string;
   suggestedCarrier?: string;
   confidence?: number;
@@ -63,31 +66,89 @@ export default function RegisterPackageScreen() {
 
   // ─── Resident search ──────────────────────────────────────
 
-  const handleSearch = useCallback(async () => {
-    if (!user?.buildingId || query.trim().length < 2) return;
-    setSearching(true);
-    try {
-      const result = await client.graphql({
-        query: searchResidents,
-        variables: { buildingId: user.buildingId, query: query.trim(), limit: 10 },
-      });
-      const items = (result as { data: { searchResidents: { items: Resident[] } } })
-        .data.searchResidents.items;
-      setResidents(items);
-    } catch {
-      Alert.alert('Error', 'No se pudo buscar residentes');
-    } finally {
-      setSearching(false);
-    }
-  }, [user?.buildingId, query]);
-
   const selectResident = (r: Resident) => {
     setSelectedResident(r);
     setResidents([]);
     setQuery(r.fullName);
   };
 
-  // ─── Photo & OCR ──────────────────────────────────────────
+  // Searches residents by an arbitrary name. When called from the OCR step we
+  // auto-select if there is a single clear match.
+  const runSearch = useCallback(
+    async (name: string, autoSelect = false) => {
+      if (!user?.buildingId) {
+        Alert.alert(
+          'Sin edificio asignado',
+          'Tu usuario no tiene un edificio asignado. Cierra sesión y vuelve a entrar, o pide al administrador que te asigne uno.',
+        );
+        return;
+      }
+      if (name.trim().length < 2) return;
+      setSearching(true);
+      try {
+        const result = await client.graphql({
+          query: searchResidents,
+          variables: { buildingId: user.buildingId, query: name.trim(), limit: 10 },
+        });
+        const items = (result as { data: { searchResidents: { items: Resident[] } } })
+          .data.searchResidents.items;
+        setResidents(items);
+        if (autoSelect && items.length === 1) selectResident(items[0]);
+      } catch {
+        Alert.alert('Error', 'No se pudo buscar residentes');
+      } finally {
+        setSearching(false);
+      }
+    },
+    [user?.buildingId],
+  );
+
+  const handleSearch = () => runSearch(query);
+
+  // Matches a resident by unit/department (more reliable than the name).
+  // Narrows by tower, then by name, when several residents share a unit.
+  const matchByUnit = useCallback(
+    async (unit: string, tower?: string, name?: string): Promise<boolean> => {
+      if (!user?.buildingId) return false;
+      const norm = (s?: string) => (s ?? '').toString().trim().toUpperCase();
+      try {
+        const result = await client.graphql({
+          query: listResidents,
+          variables: { buildingId: user.buildingId, limit: 500 },
+        });
+        const all = (result as { data: { listResidents: { items: Resident[] } } })
+          .data.listResidents.items;
+
+        let matches = all.filter((r) => norm(r.unitNumber) === norm(unit));
+        if (matches.length > 1 && tower) {
+          const byTower = matches.filter(
+            (r) => norm(r.towerName).includes(norm(tower)) || norm(tower).includes(norm(r.towerName)),
+          );
+          if (byTower.length) matches = byTower;
+        }
+        if (matches.length > 1 && name) {
+          const tokens = norm(name).split(/\s+/).filter(Boolean);
+          const byName = matches.filter((r) => tokens.some((t) => norm(r.fullName).includes(t)));
+          if (byName.length) matches = byName;
+        }
+
+        if (matches.length === 1) {
+          selectResident(matches[0]);
+          return true;
+        }
+        if (matches.length > 1) {
+          setResidents(matches); // let the guard pick among same-unit residents
+          return true;
+        }
+        return false;
+      } catch {
+        return false;
+      }
+    },
+    [user?.buildingId],
+  );
+
+  // ─── Photo & OCR (core) ───────────────────────────────────
 
   const pickPhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -103,11 +164,20 @@ export default function RegisterPackageScreen() {
 
     const uri = result.assets[0].uri;
     setPhotoUri(uri);
+    // New photo → reset any previous detection
+    setSelectedResident(null);
+    setResidents([]);
     await uploadAndOcr(uri);
   };
 
   const uploadAndOcr = async (uri: string) => {
-    if (!user?.buildingId) return;
+    if (!user?.buildingId) {
+      Alert.alert(
+        'Sin edificio asignado',
+        'Tu usuario no tiene un edificio asignado. Cierra sesión y vuelve a entrar.',
+      );
+      return;
+    }
     setOcrLoading(true);
     try {
       // 1 — Get presigned URL
@@ -139,11 +209,33 @@ export default function RegisterPackageScreen() {
       const ocr = (ocrRes as { data: { processLabel: OCRResult } }).data.processLabel;
       setOcrResult(ocr);
 
-      // Auto-fill fields from OCR
+      // Auto-fill package fields from OCR
       if (ocr.suggestedCarrier) setCarrier(ocr.suggestedCarrier);
       if (ocr.suggestedTrackingNumber) setTrackingNumber(ocr.suggestedTrackingNumber);
+
+      // Core: match by unit/department first (more reliable than the name),
+      // then fall back to a name search.
+      let matched = false;
+      if (ocr.suggestedUnitNumber) {
+        matched = await matchByUnit(
+          ocr.suggestedUnitNumber,
+          ocr.suggestedTowerName,
+          ocr.suggestedName,
+        );
+      }
+      if (!matched) {
+        if (ocr.suggestedName) {
+          setQuery(ocr.suggestedName);
+          await runSearch(ocr.suggestedName, true);
+        } else {
+          Alert.alert(
+            'No se detectó al residente',
+            'No se pudo leer torre/depto ni el nombre. Búscalo manualmente abajo.',
+          );
+        }
+      }
     } catch {
-      Alert.alert('OCR falló', 'Puedes continuar sin foto o ingresando los datos manualmente.');
+      Alert.alert('OCR falló', 'No se pudo procesar la etiqueta. Toma la foto de nuevo o busca al residente manualmente.');
     } finally {
       setOcrLoading(false);
     }
@@ -152,6 +244,10 @@ export default function RegisterPackageScreen() {
   // ─── Submit ───────────────────────────────────────────────
 
   const handleSubmit = async () => {
+    if (!photoKey) {
+      Alert.alert('Falta la foto', 'Toma la foto de la etiqueta del paquete.');
+      return;
+    }
     if (!selectedResident) {
       Alert.alert('Falta residente', 'Selecciona al residente del paquete');
       return;
@@ -205,14 +301,45 @@ export default function RegisterPackageScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
 
-      {/* STEP 1 — Resident */}
-      <SectionHeader number="1" title="Residente destinatario" />
+      {/* STEP 1 — Photo (core) */}
+      <SectionHeader number="1" title="Foto de etiqueta" />
+
+      {photoUri ? (
+        <View style={styles.photoContainer}>
+          <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
+          {ocrLoading && (
+            <View style={styles.ocrOverlay}>
+              <ActivityIndicator color={colors.white} />
+              <Text style={styles.ocrOverlayText}>Leyendo etiqueta y buscando residente...</Text>
+            </View>
+          )}
+          {ocrResult && !ocrLoading && (
+            <View style={styles.ocrBadge}>
+              <Text style={styles.ocrBadgeText}>
+                OCR: {Math.round((ocrResult.confidence ?? 0) * 100)}% confianza
+              </Text>
+            </View>
+          )}
+          <TouchableOpacity style={styles.retakeButton} onPress={pickPhoto}>
+            <Text style={styles.retakeText}>Retomar foto</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <TouchableOpacity style={styles.photoPlaceholder} onPress={pickPhoto} activeOpacity={0.7}>
+          <Text style={styles.photoIcon}>📷</Text>
+          <Text style={styles.photoText}>Tomar foto de etiqueta</Text>
+          <Text style={styles.photoSubtext}>El OCR detecta al residente y los datos del paquete</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* STEP 2 — Resident (auto-detected from OCR, manual fallback) */}
+      <SectionHeader number="2" title="Residente destinatario" />
 
       <TextInput
         style={styles.input}
         value={query}
         onChangeText={(t) => { setQuery(t); setSelectedResident(null); }}
-        placeholder="Buscar por nombre..."
+        placeholder="Detectado del OCR o búscalo por nombre..."
         placeholderTextColor={colors.gray400}
         returnKeyType="search"
         onSubmitEditing={handleSearch}
@@ -250,37 +377,6 @@ export default function RegisterPackageScreen() {
         </View>
       )}
 
-      {/* STEP 2 — Photo */}
-      <SectionHeader number="2" title="Foto de etiqueta (opcional)" />
-
-      {photoUri ? (
-        <View style={styles.photoContainer}>
-          <Image source={{ uri: photoUri }} style={styles.photo} resizeMode="cover" />
-          {ocrLoading && (
-            <View style={styles.ocrOverlay}>
-              <ActivityIndicator color={colors.white} />
-              <Text style={styles.ocrOverlayText}>Procesando OCR...</Text>
-            </View>
-          )}
-          {ocrResult && !ocrLoading && (
-            <View style={styles.ocrBadge}>
-              <Text style={styles.ocrBadgeText}>
-                OCR: {Math.round((ocrResult.confidence ?? 0) * 100)}% confianza
-              </Text>
-            </View>
-          )}
-          <TouchableOpacity style={styles.retakeButton} onPress={pickPhoto}>
-            <Text style={styles.retakeText}>Retomar foto</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <TouchableOpacity style={styles.photoPlaceholder} onPress={pickPhoto} activeOpacity={0.7}>
-          <Text style={styles.photoIcon}>📷</Text>
-          <Text style={styles.photoText}>Tomar foto de etiqueta</Text>
-          <Text style={styles.photoSubtext}>El OCR llenará datos automáticamente</Text>
-        </TouchableOpacity>
-      )}
-
       {/* STEP 3 — Package data */}
       <SectionHeader number="3" title="Datos del paquete" />
 
@@ -305,9 +401,9 @@ export default function RegisterPackageScreen() {
 
       {/* Submit */}
       <TouchableOpacity
-        style={[styles.primaryButton, (!selectedResident || submitting) && styles.disabled]}
+        style={[styles.primaryButton, (!photoKey || !selectedResident || submitting) && styles.disabled]}
         onPress={handleSubmit}
-        disabled={!selectedResident || submitting}
+        disabled={!photoKey || !selectedResident || submitting}
         activeOpacity={0.8}
       >
         {submitting

@@ -26,7 +26,13 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
-      await signIn({ username: email.trim().toLowerCase(), password });
+      await signIn({
+        username: email.trim().toLowerCase(),
+        password,
+        // USER_PASSWORD_AUTH avoids the SRP flow, which can throw
+        // "An unknown error has occurred" on React Native (crypto/BigInt).
+        options: { authFlowType: 'USER_PASSWORD_AUTH' },
+      });
       // Hub listener in _layout.tsx handles redirect after signedIn event
     } catch (err: unknown) {
       const message =

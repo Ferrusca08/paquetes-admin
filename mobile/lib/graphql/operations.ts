@@ -70,6 +70,17 @@ export const searchResidents = /* GraphQL */ `
   }
 `;
 
+export const listResidents = /* GraphQL */ `
+  query ListResidents($buildingId: ID!, $limit: Int) {
+    listResidents(buildingId: $buildingId, limit: $limit) {
+      items {
+        id buildingId towerId unitId
+        fullName phone email towerName unitNumber createdAt
+      }
+    }
+  }
+`;
+
 export const listBuildings = /* GraphQL */ `
   query ListBuildings($limit: Int) {
     listBuildings(limit: $limit) {
@@ -115,7 +126,8 @@ export const getUploadUrl = /* GraphQL */ `
 export const processLabel = /* GraphQL */ `
   mutation ProcessLabel($input: ProcessLabelInput!) {
     processLabel(input: $input) {
-      suggestedName suggestedTrackingNumber suggestedCarrier rawText confidence
+      suggestedName suggestedTowerName suggestedUnitNumber
+      suggestedTrackingNumber suggestedCarrier rawText confidence
     }
   }
 `;
