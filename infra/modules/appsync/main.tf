@@ -162,6 +162,10 @@ locals {
     "Mutation-updateResident"      = { type = "Mutation", field = "updateResident" }
     "Mutation-deleteResident"      = { type = "Mutation", field = "deleteResident" }
     "Mutation-registerPushToken"   = { type = "Mutation", field = "registerPushToken" }
+    # Guards (Cognito-only staff users)
+    "Query-listGuards"     = { type = "Query",    field = "listGuards" }
+    "Mutation-createGuard" = { type = "Mutation", field = "createGuard" }
+    "Mutation-deleteGuard" = { type = "Mutation", field = "deleteGuard" }
   }
 }
 

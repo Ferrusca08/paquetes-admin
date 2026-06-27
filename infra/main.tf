@@ -117,6 +117,8 @@ module "lambda" {
   appsync_api_id         = module.appsync.api_id
   appsync_api_arn        = module.appsync.api_arn
   notification_topic_arn = aws_sns_topic.package_events.arn
+  cognito_user_pool_id   = module.cognito.user_pool_id
+  cognito_user_pool_arn  = module.cognito.user_pool_arn
 }
 
 # -----------------------------------------------------------------------------

@@ -52,3 +52,15 @@ variable "notification_topic_arn" {
   type        = string
   default     = ""
 }
+
+variable "cognito_user_pool_id" {
+  description = "Cognito User Pool ID (for provisioning resident/guard logins)"
+  type        = string
+  default     = ""
+}
+
+variable "cognito_user_pool_arn" {
+  description = "Cognito User Pool ARN (for IAM scoping of admin actions)"
+  type        = string
+  default     = ""
+}

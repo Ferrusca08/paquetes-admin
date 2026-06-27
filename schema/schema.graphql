@@ -93,6 +93,16 @@ type Package {
   expiresAt: AWSDateTime
 }
 
+type Guard {
+  id: ID!
+  fullName: String!
+  email: String!
+  phone: String
+  buildingId: ID
+  status: String
+  createdAt: AWSDateTime
+}
+
 type OCRResult {
   suggestedName: String
   suggestedTrackingNumber: String
@@ -133,6 +143,11 @@ type ResidentConnection {
 
 type BuildingConnection {
   items: [Building!]!
+  nextToken: String
+}
+
+type GuardConnection {
+  items: [Guard!]!
   nextToken: String
 }
 
@@ -216,6 +231,13 @@ input GetUploadUrlInput {
   purpose: String!
 }
 
+input CreateGuardInput {
+  buildingId: ID!
+  fullName: String!
+  email: String!
+  phone: String
+}
+
 # ============================================================
 # QUERIES
 # ============================================================
@@ -250,6 +272,9 @@ type Query {
     limit: Int
     nextToken: String
   ): UnitConnection!
+
+  # --- Guards (staff) ---
+  listGuards(buildingId: ID!): GuardConnection!
 
   # --- Residents ---
   listResidents(
@@ -295,6 +320,10 @@ type Mutation {
   createResident(input: CreateResidentInput!): Resident!
   updateResident(input: UpdateResidentInput!): Resident!
   deleteResident(buildingId: ID!, residentId: ID!): ID!
+
+  # --- Guards (staff Cognito users) ---
+  createGuard(input: CreateGuardInput!): Guard!
+  deleteGuard(username: String!): ID!
 
   # --- Notifications ---
   registerPushToken(residentId: ID!, buildingId: ID!, pushToken: String!): Boolean!

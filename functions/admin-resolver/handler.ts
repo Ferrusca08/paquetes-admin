@@ -19,6 +19,13 @@ import {
   QueryCommand,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
+import {
+  CognitoIdentityProviderClient,
+  AdminCreateUserCommand,
+  AdminAddUserToGroupCommand,
+  ListUsersInGroupCommand,
+  AdminDeleteUserCommand,
+} from "@aws-sdk/client-cognito-identity-provider";
 import { docClient } from "../shared/dynamo-client.js";
 import { TABLE_NAME, PK, SK, GSI1 } from "../shared/constants.js";
 import type {
@@ -37,8 +44,99 @@ import type {
 import { NotFoundError } from "../shared/errors.js";
 import { generateId, now, normalizeName } from "../shared/utils.js";
 
+// ─── Cognito (user provisioning) ────────────────────────────────────────────
+const REGION = process.env.AWS_REGION || "us-east-1";
+const USER_POOL_ID = process.env.USER_POOL_ID || "";
+const GROUP_RESIDENTS = "residentes";
+const GROUP_GUARDS = "guardias";
+const cognito = new CognitoIdentityProviderClient({ region: REGION });
+
+// Fields that mutate/manage data and must only be callable by admins.
+// Read queries used by the mobile app (searchResidents, listBuildings, etc.)
+// and registerPushToken (called by residents) are intentionally excluded.
+const ADMIN_ONLY = new Set([
+  "createBuilding",
+  "updateBuilding",
+  "deleteBuilding",
+  "createTower",
+  "deleteTower",
+  "createUnit",
+  "deleteUnit",
+  "createResident",
+  "updateResident",
+  "deleteResident",
+  "createGuard",
+  "listGuards",
+  "deleteGuard",
+]);
+
+function callerGroups(event: AppSyncResolverEvent): string[] {
+  const id = (event.identity || {}) as {
+    groups?: string[];
+    claims?: Record<string, unknown>;
+  };
+  if (Array.isArray(id.groups)) return id.groups;
+  const c = id.claims?.["cognito:groups"];
+  if (Array.isArray(c)) return c as string[];
+  if (typeof c === "string") return c.split(",");
+  return [];
+}
+
+function requireAdmin(event: AppSyncResolverEvent): void {
+  if (!callerGroups(event).includes("admins")) {
+    throw new Error("Unauthorized: this operation requires the 'admins' group");
+  }
+}
+
+/**
+ * Creates a Cognito login and assigns it to a group. Returns the user's sub.
+ * Sends an invitation email with a temporary password (COGNITO_DEFAULT email).
+ */
+async function provisionUser(opts: {
+  email: string;
+  phone?: string | null;
+  fullName: string;
+  group: string;
+  attributes?: Record<string, string | undefined>;
+}): Promise<string> {
+  if (!USER_POOL_ID) {
+    throw new Error("USER_POOL_ID is not configured");
+  }
+  const userAttributes: { Name: string; Value: string }[] = [
+    { Name: "email", Value: opts.email },
+    { Name: "email_verified", Value: "true" },
+    { Name: "name", Value: opts.fullName },
+  ];
+  // phone_number must be E.164 (e.g. +5215512345678) or Cognito rejects it.
+  if (opts.phone && /^\+\d{8,15}$/.test(opts.phone)) {
+    userAttributes.push({ Name: "phone_number", Value: opts.phone });
+  }
+  for (const [k, v] of Object.entries(opts.attributes || {})) {
+    if (v) userAttributes.push({ Name: k, Value: v });
+  }
+  const created = await cognito.send(
+    new AdminCreateUserCommand({
+      UserPoolId: USER_POOL_ID,
+      Username: opts.email,
+      UserAttributes: userAttributes,
+      DesiredDeliveryMediums: ["EMAIL"],
+    }),
+  );
+  await cognito.send(
+    new AdminAddUserToGroupCommand({
+      UserPoolId: USER_POOL_ID,
+      Username: opts.email,
+      GroupName: opts.group,
+    }),
+  );
+  const sub = created.User?.Attributes?.find((a) => a.Name === "sub")?.Value;
+  return sub || opts.email;
+}
+
 export const handler = async (event: AppSyncResolverEvent) => {
   const field = event.info.fieldName;
+
+  if (ADMIN_ONLY.has(field)) requireAdmin(event);
 
   switch (field) {
     // ─── Queries ──────────────────────────────────────────────────────
@@ -90,6 +188,14 @@ export const handler = async (event: AppSyncResolverEvent) => {
           pushToken: string;
         }>,
       );
+
+    // ─── Guard (Cognito-only staff users) ────────────────────────────
+    case "createGuard":
+      return createGuard(event as AppSyncResolverEvent<{ input: CreateGuardInput }>);
+    case "listGuards":
+      return listGuards(event as AppSyncResolverEvent<{ buildingId: string }>);
+    case "deleteGuard":
+      return deleteGuard(event as AppSyncResolverEvent<{ username: string }>);
 
     default:
       throw new Error(`Unknown field: ${field}`);
@@ -481,6 +587,23 @@ async function createResident(
 
   const gsi1Keys = GSI1.residentProfile(id);
 
+  // Provision a Cognito login (residentes group) so the resident can use the
+  // mobile app. Requires an email; the resident's id is stored as
+  // custom:residentId so the app can resolve their profile.
+  let cognitoUserId: string | undefined;
+  if (input.email && USER_POOL_ID) {
+    cognitoUserId = await provisionUser({
+      email: input.email,
+      phone: input.phone,
+      fullName: input.fullName,
+      group: GROUP_RESIDENTS,
+      attributes: {
+        "custom:buildingId": input.buildingId,
+        "custom:residentId": id,
+      },
+    });
+  }
+
   const item: ResidentItem = {
     PK: PK.building(input.buildingId),
     SK: SK.resident(id),
@@ -494,6 +617,7 @@ async function createResident(
     nameNormalized: normalizeName(input.fullName),
     phone: input.phone,
     email: input.email,
+    cognitoUserId,
     towerName,
     unitNumber,
     createdAt,
@@ -501,6 +625,81 @@ async function createResident(
 
   await docClient.send(new PutCommand({ TableName: TABLE_NAME, Item: item }));
   return residentToGraphQL(item);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// GUARD  (Cognito-only staff users — no DynamoDB entity)
+// ═══════════════════════════════════════════════════════════════════════════
+
+interface CreateGuardInput {
+  buildingId: string;
+  fullName: string;
+  email: string;
+  phone?: string | null;
+}
+
+async function createGuard(
+  event: AppSyncResolverEvent<{ input: CreateGuardInput }>,
+) {
+  const { input } = event.arguments;
+  const sub = await provisionUser({
+    email: input.email,
+    phone: input.phone,
+    fullName: input.fullName,
+    group: GROUP_GUARDS,
+    attributes: { "custom:buildingId": input.buildingId },
+  });
+  return {
+    id: sub,
+    fullName: input.fullName,
+    email: input.email,
+    phone: input.phone ?? null,
+    buildingId: input.buildingId,
+    status: "FORCE_CHANGE_PASSWORD",
+    createdAt: now(),
+  };
+}
+
+async function listGuards(
+  event: AppSyncResolverEvent<{ buildingId: string }>,
+) {
+  const { buildingId } = event.arguments;
+  const res = await cognito.send(
+    new ListUsersInGroupCommand({
+      UserPoolId: USER_POOL_ID,
+      GroupName: GROUP_GUARDS,
+      Limit: 60,
+    }),
+  );
+  const attr = (u: { Attributes?: { Name?: string; Value?: string }[] }, n: string) =>
+    u.Attributes?.find((a) => a.Name === n)?.Value;
+  const items = (res.Users || [])
+    .map((u) => ({
+      id: u.Username as string,
+      fullName: attr(u, "name") || attr(u, "email") || (u.Username as string),
+      email: attr(u, "email") || "",
+      phone: attr(u, "phone_number") || null,
+      buildingId: attr(u, "custom:buildingId") || null,
+      status: u.UserStatus || null,
+      createdAt: u.UserCreateDate
+        ? new Date(u.UserCreateDate).toISOString()
+        : null,
+    }))
+    .filter((g) => !buildingId || g.buildingId === buildingId);
+  return { items, nextToken: null };
+}
+
+async function deleteGuard(
+  event: AppSyncResolverEvent<{ username: string }>,
+) {
+  const { username } = event.arguments;
+  await cognito.send(
+    new AdminDeleteUserCommand({
+      UserPoolId: USER_POOL_ID,
+      Username: username,
+    }),
+  );
+  return username;
 }
 
 async function updateResident(

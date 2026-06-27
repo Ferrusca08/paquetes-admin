@@ -19,7 +19,8 @@ locals {
       BUCKET_NAME = var.s3_bucket_name
       AWS_NODEJS_CONNECTION_REUSE_ENABLED = "1"
     },
-    var.notification_topic_arn != "" ? { NOTIFICATION_TOPIC_ARN = var.notification_topic_arn } : {}
+    var.notification_topic_arn != "" ? { NOTIFICATION_TOPIC_ARN = var.notification_topic_arn } : {},
+    var.cognito_user_pool_id != "" ? { USER_POOL_ID = var.cognito_user_pool_id } : {}
   )
 
   # Function definitions: name → handler-specific overrides
@@ -146,6 +147,33 @@ resource "aws_iam_role_policy" "textract" {
           "textract:AnalyzeDocument",
         ]
         Resource = "*"
+      }
+    ]
+  })
+}
+
+# Cognito admin access (for provisioning resident/guard logins from the panel)
+resource "aws_iam_role_policy" "cognito" {
+  count = var.cognito_user_pool_arn != "" ? 1 : 0
+
+  name = "${var.project}-${var.environment}-lambda-cognito"
+  role = aws_iam_role.lambda.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "cognito-idp:AdminCreateUser",
+          "cognito-idp:AdminAddUserToGroup",
+          "cognito-idp:AdminListGroupsForUser",
+          "cognito-idp:AdminGetUser",
+          "cognito-idp:AdminDeleteUser",
+          "cognito-idp:AdminUpdateUserAttributes",
+          "cognito-idp:ListUsersInGroup",
+        ]
+        Resource = var.cognito_user_pool_arn
       }
     ]
   })
