@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PackTrack · Admin</title>
+<style>
+  :root{
+    --bg:#0f172a; --bg2:#1e293b; --surface:#ffffff; --surface2:#f8fafc;
+    --border:#e2e8f0; --text:#0f172a; --muted:#64748b; --primary:#4f46e5;
+    --primary-d:#4338ca; --green:#16a34a; --amber:#d97706; --red:#dc2626;
+    --blue:#2563eb; --slate:#475569;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--surface2);color:var(--text);font-size:14px;line-height:1.5}
+  button{font-family:inherit;cursor:pointer;border:none}
+  input,select{font-family:inherit;font-size:14px}
+  a{color:var(--primary)}
+
+  /* ---------- LOGIN ---------- */
+  #login{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#1e293b,#4f46e5)}
+  .login-card{background:#fff;border-radius:16px;padding:40px;width:380px;box-shadow:0 20px 50px rgba(0,0,0,.3)}
+  .login-card .logo{font-size:26px;font-weight:800;text-align:center;margin-bottom:4px}
+  .login-card .logo span{color:var(--primary)}
+  .login-card .sub{text-align:center;color:var(--muted);margin-bottom:28px;font-size:13px}
+  .field{margin-bottom:16px}
+  .field label{display:block;font-size:12px;font-weight:600;color:var(--slate);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em}
+  .field input{width:100%;padding:12px 14px;border:1.5px solid var(--border);border-radius:10px;transition:border .15s}
+  .field input:focus{outline:none;border-color:var(--primary)}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:11px 18px;border-radius:10px;font-weight:600;font-size:14px;background:var(--primary);color:#fff;transition:background .15s}
+  .btn:hover{background:var(--primary-d)}
+  .btn:disabled{opacity:.6;cursor:not-allowed}
+  .btn-block{width:100%}
+  .btn-sm{padding:7px 12px;font-size:13px;border-radius:8px}
+  .btn-ghost{background:transparent;color:var(--slate);border:1.5px solid var(--border)}
+  .btn-ghost:hover{background:var(--surface2)}
+  .btn-danger{background:var(--red)}.btn-danger:hover{background:#b91c1c}
+  .err{background:#fef2f2;color:var(--red);padding:10px 12px;border-radius:8px;font-size:13px;margin-bottom:16px;border:1px solid #fecaca}
+
+  /* ---------- APP SHELL ---------- */
+  #app{display:none;min-height:100vh}
+  .layout{display:flex;min-height:100vh}
+  .sidebar{width:230px;background:var(--bg);color:#cbd5e1;display:flex;flex-direction:column;position:fixed;height:100vh}
+  .sidebar .brand{padding:22px 22px;font-size:20px;font-weight:800;color:#fff;border-bottom:1px solid #1e293b}
+  .sidebar .brand span{color:#818cf8}
+  .nav{padding:14px 12px;flex:1}
+  .nav-item{display:flex;align-items:center;gap:11px;padding:11px 14px;border-radius:9px;color:#cbd5e1;font-weight:500;cursor:pointer;margin-bottom:3px;transition:background .12s}
+  .nav-item:hover{background:#1e293b;color:#fff}
+  .nav-item.active{background:var(--primary);color:#fff}
+  .nav-item .ico{font-size:17px;width:20px;text-align:center}
+  .sidebar .foot{padding:16px;border-top:1px solid #1e293b;font-size:12px;color:#64748b}
+
+  .main{margin-left:230px;flex:1;display:flex;flex-direction:column}
+  .topbar{background:#fff;border-bottom:1px solid var(--border);padding:0 28px;height:62px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:20}
+  .topbar .bsel{display:flex;align-items:center;gap:10px}
+  .topbar select{padding:8px 12px;border:1.5px solid var(--border);border-radius:9px;font-weight:600;color:var(--text);background:#fff;min-width:200px}
+  .topbar .user{display:flex;align-items:center;gap:12px;font-size:13px;color:var(--muted)}
+  .avatar{width:34px;height:34px;border-radius:50%;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700}
+  .content{padding:28px;max-width:1200px;width:100%}
+  .page-title{font-size:22px;font-weight:800;margin-bottom:4px}
+  .page-sub{color:var(--muted);margin-bottom:24px;font-size:13px}
+
+  /* ---------- CARDS / STATS ---------- */
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:16px;margin-bottom:28px}
+  .stat{background:#fff;border:1px solid var(--border);border-radius:14px;padding:18px 20px}
+  .stat .lbl{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em;display:flex;align-items:center;gap:7px}
+  .stat .val{font-size:30px;font-weight:800;margin-top:8px}
+  .dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+
+  .card{background:#fff;border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:22px}
+  .card-head{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)}
+  .card-head h3{font-size:15px;font-weight:700}
+  .card-body{padding:4px 0}
+
+  table{width:100%;border-collapse:collapse}
+  th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;padding:11px 20px;border-bottom:1px solid var(--border);background:var(--surface2)}
+  td{padding:13px 20px;border-bottom:1px solid var(--border);vertical-align:middle}
+  tr:last-child td{border-bottom:none}
+  tr:hover td{background:#fafbff}
+  .row-actions{display:flex;gap:6px;justify-content:flex-end}
+
+  .badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600}
+  .b-recibido{background:#eff6ff;color:var(--blue)}
+  .b-notificado{background:#fffbeb;color:var(--amber)}
+  .b-entregado{background:#f0fdf4;color:var(--green)}
+  .b-devuelto{background:#f1f5f9;color:var(--slate)}
+  .b-expirado{background:#fef2f2;color:var(--red)}
+  .code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:700;letter-spacing:.05em;background:var(--surface2);padding:2px 8px;border-radius:6px}
+
+  .tabs{display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap}
+  .tab{padding:8px 15px;border-radius:9px;font-weight:600;font-size:13px;background:#fff;border:1.5px solid var(--border);color:var(--slate)}
+  .tab.active{background:var(--primary);border-color:var(--primary);color:#fff}
+
+  .empty{padding:48px 20px;text-align:center;color:var(--muted)}
+  .empty .big{font-size:34px;margin-bottom:8px}
+  .muted{color:var(--muted)}
+  .loading{padding:40px;text-align:center;color:var(--muted)}
+  .spinner{width:26px;height:26px;border:3px solid var(--border);border-top-color:var(--primary);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 12px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ---------- MODAL ---------- */
+  .modal-bg{display:none;position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:50;align-items:center;justify-content:center;padding:20px}
+  .modal-bg.show{display:flex}
+  .modal{background:#fff;border-radius:16px;width:440px;max-width:100%;max-height:90vh;overflow:auto;box-shadow:0 25px 60px rgba(0,0,0,.3)}
+  .modal-head{padding:20px 24px;border-bottom:1px solid var(--border);font-size:17px;font-weight:700}
+  .modal-body{padding:22px 24px}
+  .modal-foot{padding:16px 24px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px}
+  .toast{position:fixed;bottom:24px;right:24px;background:var(--bg);color:#fff;padding:13px 18px;border-radius:10px;font-size:14px;z-index:100;opacity:0;transform:translateY(10px);transition:.25s;box-shadow:0 10px 30px rgba(0,0,0,.3)}
+  .toast.show{opacity:1;transform:translateY(0)}
+  .toast.err{background:var(--red)}
+</style>
+</head>
+<body>
+
+<!-- ================= LOGIN ================= -->
+<div id="login">
+  <form class="login-card" id="loginForm">
+    <div class="logo">Pack<span>Track</span></div>
+    <div class="sub">Panel de administración</div>
+    <div id="loginErr" class="err" style="display:none"></div>
+    <div class="field">
+      <label>Correo</label>
+      <input type="email" id="email" placeholder="admin@packtrack.com" autocomplete="username" required />
+    </div>
+    <div class="field">
+      <label>Contraseña</label>
+      <input type="password" id="password" placeholder="••••••••" autocomplete="current-password" required />
+    </div>
+    <button class="btn btn-block" id="loginBtn" type="submit">Iniciar sesión</button>
+  </form>
+</div>
+
+<!-- ================= APP ================= -->
+<div id="app">
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">Pack<span>Track</span></div>
+      <nav class="nav" id="nav">
+        <div class="nav-item active" data-view="overview"><span class="ico">📊</span> Resumen</div>
+        <div class="nav-item" data-view="packages"><span class="ico">📦</span> Paquetes</div>
+        <div class="nav-item" data-view="residents"><span class="ico">👥</span> Residentes</div>
+        <div class="nav-item" data-view="buildings"><span class="ico">🏢</span> Edificios</div>
+      </nav>
+      <div class="foot">PackTrack Admin · dev<br/>v1.0</div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <div class="bsel">
+          <span class="muted" style="font-size:13px;font-weight:600">Edificio:</span>
+          <select id="buildingSel"></select>
+        </div>
+        <div class="user">
+          <span id="userEmail"></span>
+          <div class="avatar" id="avatar">A</div>
+          <button class="btn btn-ghost btn-sm" id="logoutBtn">Salir</button>
+        </div>
+      </header>
+      <div class="content" id="content"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal">
+    <div class="modal-head" id="modalTitle"></div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-foot" id="modalFoot"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   CONFIG  (valores públicos de cliente — no secretos)
+   ============================================================ */
+const CFG = {
+  region: "us-east-1",
+  clientId: "54mfccmv0tuaopput64vqj74pc",
+  cognito: "https://cognito-idp.us-east-1.amazonaws.com/",
+  graphql: "https://rm7ud7ae3nc4zpsl5s6wlxmtbq.appsync-api.us-east-1.amazonaws.com/graphql",
+};
+const STATUSES = ["RECIBIDO","NOTIFICADO","ENTREGADO","DEVUELTO","EXPIRADO"];
+const STATUS_LABEL = {RECIBIDO:"Recibido",NOTIFICADO:"Notificado",ENTREGADO:"Entregado",DEVUELTO:"Devuelto",EXPIRADO:"Expirado"};
+const STATUS_COLOR = {RECIBIDO:"#2563eb",NOTIFICADO:"#d97706",ENTREGADO:"#16a34a",DEVUELTO:"#475569",EXPIRADO:"#dc2626"};
+
+/* ============================================================
+   STATE
+   ============================================================ */
+const S = {
+  idToken: localStorage.getItem("pt_idToken") || null,
+  email: localStorage.getItem("pt_email") || null,
+  buildings: [],
+  building: null,      // selected building id
+  towers: [],
+  units: [],
+  residents: [],
+  view: "overview",
+};
+
+/* ============================================================
+   AUTH
+   ============================================================ */
+async function cognitoLogin(email, password){
+  const res = await fetch(CFG.cognito, {
+    method:"POST",
+    headers:{"Content-Type":"application/x-amz-json-1.1","X-Amz-Target":"AWSCognitoIdentityProviderService.InitiateAuth"},
+    body: JSON.stringify({
+      AuthFlow:"USER_PASSWORD_AUTH", ClientId: CFG.clientId,
+      AuthParameters:{ USERNAME: email, PASSWORD: password }
+    })
+  });
+  const data = await res.json();
+  if(!res.ok){ throw new Error(data.message || data.__type || "Error de autenticación"); }
+  if(data.ChallengeName){ throw new Error("Se requiere paso adicional: "+data.ChallengeName); }
+  return data.AuthenticationResult.IdToken;
+}
+
+function logout(){
+  localStorage.removeItem("pt_idToken");
+  localStorage.removeItem("pt_email");
+  S.idToken=null; S.email=null;
+  location.reload();
+}
+
+/* ============================================================
+   GRAPHQL CLIENT
+   ============================================================ */
+async function gql(query, variables={}){
+  const res = await fetch(CFG.graphql, {
+    method:"POST",
+    headers:{"Content-Type":"application/json","Authorization": S.idToken},
+    body: JSON.stringify({query, variables})
+  });
+  const data = await res.json();
+  if(data.errors){
+    const msg = data.errors.map(e=>e.message).join("; ");
+    if(/UnauthorizedException|token|expired/i.test(msg)){ toast("Sesión expirada","err"); setTimeout(logout,1200); }
+    throw new Error(msg);
+  }
+  return data.data;
+}
+
+/* ---- Queries ---- */
+const Q = {
+  listBuildings: `query{ listBuildings(limit:100){ items{ id name address createdAt } } }`,
+  listTowers: `query($b:ID!){ listTowers(buildingId:$b,limit:200){ items{ id name buildingId } } }`,
+  listUnits: `query($b:ID!){ listUnits(buildingId:$b,limit:500){ items{ id number towerId towerName } } }`,
+  listResidents: `query($b:ID!){ listResidents(buildingId:$b,limit:500){ items{ id fullName phone email towerName unitNumber towerId unitId createdAt } } }`,
+  listPackages: `query($b:ID!,$s:PackageStatus!){ listPackagesByStatus(buildingId:$b,status:$s,limit:200){ items{ id residentName towerName unitNumber carrier trackingNumber pickupCode status createdAt deliveredAt } } }`,
+};
+const M = {
+  createBuilding: `mutation($i:CreateBuildingInput!){ createBuilding(input:$i){ id } }`,
+  updateBuilding: `mutation($i:UpdateBuildingInput!){ updateBuilding(input:$i){ id } }`,
+  deleteBuilding: `mutation($id:ID!){ deleteBuilding(id:$id) }`,
+  createTower: `mutation($i:CreateTowerInput!){ createTower(input:$i){ id } }`,
+  createUnit: `mutation($i:CreateUnitInput!){ createUnit(input:$i){ id } }`,
+  createResident: `mutation($i:CreateResidentInput!){ createResident(input:$i){ id } }`,
+  updateResident: `mutation($i:UpdateResidentInput!){ updateResident(input:$i){ id } }`,
+  deleteResident: `mutation($b:ID!,$r:ID!){ deleteResident(buildingId:$b,residentId:$r) }`,
+};
+
+/* ============================================================
+   HELPERS
+   ============================================================ */
+const $ = s=>document.querySelector(s);
+const esc = s=> (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function fmtDate(d){ if(!d) return "—"; const x=new Date(d); return x.toLocaleDateString("es-MX",{day:"2-digit",month:"short",year:"numeric"}); }
+function badge(status){ return `<span class="badge b-${status.toLowerCase()}"><span class="dot" style="background:${STATUS_COLOR[status]}"></span>${STATUS_LABEL[status]||status}</span>`; }
+function toast(msg, type){ const t=$("#toast"); t.textContent=msg; t.className="toast show"+(type==="err"?" err":""); setTimeout(()=>t.className="toast",2600); }
+
+function openModal(title, bodyHtml, footHtml){
+  $("#modalTitle").textContent=title; $("#modalBody").innerHTML=bodyHtml;
+  $("#modalFoot").innerHTML=footHtml; $("#modalBg").classList.add("show");
+}
+function closeModal(){ $("#modalBg").classList.remove("show"); }
+$("#modalBg").addEventListener("click",e=>{ if(e.target.id==="modalBg") closeModal(); });
+
+/* ============================================================
+   DATA LOADERS
+   ============================================================ */
+async function loadBuildings(){
+  const d = await gql(Q.listBuildings);
+  S.buildings = d.listBuildings.items || [];
+  if(!S.building && S.buildings.length) S.building = S.buildings[0].id;
+}
+async function loadBuildingData(){
+  if(!S.building){ S.towers=[];S.units=[];S.residents=[]; return; }
+  const [t,u,r] = await Promise.all([
+    gql(Q.listTowers,{b:S.building}),
+    gql(Q.listUnits,{b:S.building}),
+    gql(Q.listResidents,{b:S.building}),
+  ]);
+  S.towers = t.listTowers.items||[];
+  S.units = u.listUnits.items||[];
+  S.residents = r.listResidents.items||[];
+}
+
+/* ============================================================
+   VIEWS
+   ============================================================ */
+function setLoading(){ $("#content").innerHTML = `<div class="loading"><div class="spinner"></div>Cargando…</div>`; }
+
+async function render(){
+  // building selector
+  const sel = $("#buildingSel");
+  sel.innerHTML = S.buildings.length
+    ? S.buildings.map(b=>`<option value="${b.id}" ${b.id===S.building?"selected":""}>${esc(b.name)}</option>`).join("")
+    : `<option>— sin edificios —</option>`;
+
+  if(S.view==="overview") return renderOverview();
+  if(S.view==="packages") return renderPackages();
+  if(S.view==="residents") return renderResidents();
+  if(S.view==="buildings") return renderBuildings();
+}
+
+/* ---- OVERVIEW ---- */
+async function renderOverview(){
+  setLoading();
+  let counts={}; STATUSES.forEach(s=>counts[s]=0);
+  if(S.building){
+    const results = await Promise.all(STATUSES.map(s=>gql(Q.listPackages,{b:S.building,s}).then(d=>d.listPackagesByStatus.items.length).catch(()=>0)));
+    STATUSES.forEach((s,i)=>counts[s]=results[i]);
+  }
+  const totalPkg = Object.values(counts).reduce((a,b)=>a+b,0);
+  const bname = (S.buildings.find(b=>b.id===S.building)||{}).name || "—";
+  $("#content").innerHTML = `
+    <div class="page-title">Resumen</div>
+    <div class="page-sub">Edificio: <strong>${esc(bname)}</strong></div>
+    <div class="stats">
+      <div class="stat"><div class="lbl">🏢 Edificios</div><div class="val">${S.buildings.length}</div></div>
+      <div class="stat"><div class="lbl">👥 Residentes</div><div class="val">${S.residents.length}</div></div>
+      <div class="stat"><div class="lbl">🏗️ Torres</div><div class="val">${S.towers.length}</div></div>
+      <div class="stat"><div class="lbl">📦 Paquetes</div><div class="val">${totalPkg}</div></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>Paquetes por estado</h3></div>
+      <div class="card-body">
+        <table><thead><tr><th>Estado</th><th>Cantidad</th></tr></thead><tbody>
+        ${STATUSES.map(s=>`<tr><td>${badge(s)}</td><td><strong>${counts[s]}</strong></td></tr>`).join("")}
+        </tbody></table>
+      </div>
+    </div>`;
+}
+
+/* ---- PACKAGES ---- */
+let pkgStatus = "RECIBIDO";
+async function renderPackages(){
+  if(!S.building){ return emptyState("📦","Selecciona un edificio para ver paquetes"); }
+  $("#content").innerHTML = `
+    <div class="page-title">Paquetes</div>
+    <div class="page-sub">Gestión de paquetes del edificio</div>
+    <div class="tabs" id="pkgTabs">
+      ${STATUSES.map(s=>`<div class="tab ${s===pkgStatus?"active":""}" data-s="${s}">${STATUS_LABEL[s]}</div>`).join("")}
+    </div>
+    <div id="pkgList"><div class="loading"><div class="spinner"></div>Cargando…</div></div>`;
+  document.querySelectorAll("#pkgTabs .tab").forEach(t=>t.onclick=()=>{ pkgStatus=t.dataset.s; renderPackages(); });
+  let items=[];
+  try{ const d=await gql(Q.listPackages,{b:S.building,s:pkgStatus}); items=d.listPackagesByStatus.items||[]; }
+  catch(e){ $("#pkgList").innerHTML=`<div class="empty">Error: ${esc(e.message)}</div>`; return; }
+  if(!items.length){ $("#pkgList").innerHTML=emptyHtml("📭","Sin paquetes en estado "+STATUS_LABEL[pkgStatus]); return; }
+  $("#pkgList").innerHTML = `<div class="card"><div class="card-body"><table>
+    <thead><tr><th>Residente</th><th>Ubicación</th><th>Paquetería</th><th>Código</th><th>Estado</th><th>Fecha</th></tr></thead>
+    <tbody>${items.map(p=>`<tr>
+      <td><strong>${esc(p.residentName)}</strong></td>
+      <td class="muted">${esc(p.towerName||"")} ${esc(p.unitNumber||"")}</td>
+      <td>${esc(p.carrier||"—")}<br/><span class="muted" style="font-size:12px">${esc(p.trackingNumber||"")}</span></td>
+      <td><span class="code">${esc(p.pickupCode)}</span></td>
+      <td>${badge(p.status)}</td>
+      <td class="muted">${fmtDate(p.createdAt)}</td>
+    </tr>`).join("")}</tbody></table></div></div>`;
+}
+
+/* ---- RESIDENTS ---- */
+async function renderResidents(){
+  if(!S.building){ return emptyState("👥","Selecciona un edificio"); }
+  $("#content").innerHTML = `
+    <div class="page-title">Residentes</div>
+    <div class="page-sub">${S.residents.length} residentes registrados</div>
+    <div class="card">
+      <div class="card-head"><h3>Lista de residentes</h3>
+        <button class="btn btn-sm" onclick="residentForm()">+ Nuevo residente</button></div>
+      <div class="card-body">
+        ${S.residents.length? `<table>
+          <thead><tr><th>Nombre</th><th>Ubicación</th><th>Contacto</th><th></th></tr></thead>
+          <tbody>${S.residents.map(r=>`<tr>
+            <td><strong>${esc(r.fullName)}</strong></td>
+            <td class="muted">${esc(r.towerName||"")} · ${esc(r.unitNumber||"")}</td>
+            <td>${esc(r.email||"—")}<br/><span class="muted" style="font-size:12px">${esc(r.phone||"")}</span></td>
+            <td><div class="row-actions">
+              <button class="btn btn-ghost btn-sm" onclick='residentForm(${JSON.stringify(r)})'>Editar</button>
+              <button class="btn btn-danger btn-sm" onclick="delResident('${r.id}','${esc(r.fullName)}')">Eliminar</button>
+            </div></td>
+          </tr>`).join("")}</tbody></table>` : emptyHtml("👤","Aún no hay residentes")}
+      </div>
+    </div>`;
+}
+
+function residentForm(r){
+  const isEdit=!!r; r=r||{};
+  const towerOpts = S.towers.map(t=>`<option value="${t.id}" ${r.towerId===t.id?"selected":""}>${esc(t.name)}</option>`).join("");
+  openModal(isEdit?"Editar residente":"Nuevo residente", `
+    <div class="field"><label>Nombre completo</label><input id="r_name" value="${esc(r.fullName||"")}" placeholder="Juan Pérez"/></div>
+    ${isEdit?"":`
+    <div class="field"><label>Torre</label><select id="r_tower" onchange="fillUnits()">${towerOpts||'<option value="">— sin torres —</option>'}</select></div>
+    <div class="field"><label>Unidad</label><select id="r_unit"></select></div>`}
+    <div class="field"><label>Email</label><input id="r_email" value="${esc(r.email||"")}" placeholder="correo@ejemplo.com"/></div>
+    <div class="field"><label>Teléfono</label><input id="r_phone" value="${esc(r.phone||"")}" placeholder="+52..."/></div>
+  `, `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn" id="r_save">Guardar</button>`);
+  if(!isEdit) fillUnits();
+  $("#r_save").onclick = async ()=>{
+    const name=$("#r_name").value.trim();
+    if(!name){ toast("El nombre es obligatorio","err"); return; }
+    $("#r_save").disabled=true;
+    try{
+      if(isEdit){
+        await gql(M.updateResident,{i:{id:r.id,buildingId:S.building,fullName:name,email:$("#r_email").value.trim()||null,phone:$("#r_phone").value.trim()||null}});
+      }else{
+        const towerId=$("#r_tower").value, unitId=$("#r_unit").value;
+        if(!towerId||!unitId){ toast("Selecciona torre y unidad","err"); $("#r_save").disabled=false; return; }
+        await gql(M.createResident,{i:{buildingId:S.building,towerId,unitId,fullName:name,email:$("#r_email").value.trim()||null,phone:$("#r_phone").value.trim()||null}});
+      }
+      closeModal(); toast("Residente guardado");
+      await loadBuildingData(); render();
+    }catch(e){ toast(e.message,"err"); $("#r_save").disabled=false; }
+  };
+}
+function fillUnits(){
+  const tw=$("#r_tower"); if(!tw) return;
+  const tid=tw.value;
+  const us=S.units.filter(u=>u.towerId===tid);
+  $("#r_unit").innerHTML = us.length? us.map(u=>`<option value="${u.id}">${esc(u.number)}</option>`).join("") : `<option value="">— sin unidades —</option>`;
+}
+async function delResident(id,name){
+  if(!confirm(`¿Eliminar a ${name}?`)) return;
+  try{ await gql(M.deleteResident,{b:S.building,r:id}); toast("Residente eliminado"); await loadBuildingData(); render(); }
+  catch(e){ toast(e.message,"err"); }
+}
+
+/* ---- BUILDINGS ---- */
+async function renderBuildings(){
+  $("#content").innerHTML = `
+    <div class="page-title">Edificios</div>
+    <div class="page-sub">${S.buildings.length} edificios</div>
+    <div class="card">
+      <div class="card-head"><h3>Tus edificios</h3>
+        <button class="btn btn-sm" onclick="buildingForm()">+ Nuevo edificio</button></div>
+      <div class="card-body">
+        ${S.buildings.length? `<table>
+          <thead><tr><th>Nombre</th><th>Dirección</th><th>Creado</th><th></th></tr></thead>
+          <tbody>${S.buildings.map(b=>`<tr>
+            <td><strong>${esc(b.name)}</strong></td>
+            <td class="muted">${esc(b.address)}</td>
+            <td class="muted">${fmtDate(b.createdAt)}</td>
+            <td><div class="row-actions">
+              <button class="btn btn-ghost btn-sm" onclick='buildingForm(${JSON.stringify(b)})'>Editar</button>
+              <button class="btn btn-danger btn-sm" onclick="delBuilding('${b.id}','${esc(b.name)}')">Eliminar</button>
+            </div></td>
+          </tr>`).join("")}</tbody></table>` : emptyHtml("🏢","Crea tu primer edificio")}
+      </div>
+    </div>`;
+}
+function buildingForm(b){
+  const isEdit=!!b; b=b||{};
+  openModal(isEdit?"Editar edificio":"Nuevo edificio",`
+    <div class="field"><label>Nombre</label><input id="b_name" value="${esc(b.name||"")}" placeholder="Residencial Tres Lagos"/></div>
+    <div class="field"><label>Dirección</label><input id="b_addr" value="${esc(b.address||"")}" placeholder="Av. Principal 123"/></div>
+  `,`<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+     <button class="btn" id="b_save">Guardar</button>`);
+  $("#b_save").onclick=async()=>{
+    const name=$("#b_name").value.trim(), addr=$("#b_addr").value.trim();
+    if(!name||!addr){ toast("Nombre y dirección requeridos","err"); return; }
+    $("#b_save").disabled=true;
+    try{
+      if(isEdit) await gql(M.updateBuilding,{i:{id:b.id,name,address:addr}});
+      else await gql(M.createBuilding,{i:{name,address:addr}});
+      closeModal(); toast("Edificio guardado");
+      await loadBuildings(); await loadBuildingData(); render();
+    }catch(e){ toast(e.message,"err"); $("#b_save").disabled=false; }
+  };
+}
+async function delBuilding(id,name){
+  if(!confirm(`¿Eliminar el edificio "${name}"? Esto puede dejar residentes huérfanos.`)) return;
+  try{
+    await gql(M.deleteBuilding,{id});
+    if(S.building===id) S.building=null;
+    toast("Edificio eliminado");
+    await loadBuildings(); await loadBuildingData(); render();
+  }catch(e){ toast(e.message,"err"); }
+}
+
+/* ---- empty helpers ---- */
+function emptyHtml(ico,msg){ return `<div class="empty"><div class="big">${ico}</div>${esc(msg)}</div>`; }
+function emptyState(ico,msg){ $("#content").innerHTML=`<div class="card"><div class="card-body">${emptyHtml(ico,msg)}</div></div>`; }
+
+/* ============================================================
+   NAV / BOOT
+   ============================================================ */
+document.querySelectorAll(".nav-item").forEach(n=>n.onclick=()=>{
+  document.querySelectorAll(".nav-item").forEach(x=>x.classList.remove("active"));
+  n.classList.add("active"); S.view=n.dataset.view; render();
+});
+$("#buildingSel").onchange = async e=>{ S.building=e.target.value; setLoading(); await loadBuildingData(); render(); };
+$("#logoutBtn").onclick = logout;
+
+$("#loginForm").addEventListener("submit", async e=>{
+  e.preventDefault();
+  const btn=$("#loginBtn"), errBox=$("#loginErr");
+  errBox.style.display="none"; btn.disabled=true; btn.textContent="Ingresando…";
+  try{
+    const token = await cognitoLogin($("#email").value.trim(), $("#password").value);
+    S.idToken=token; S.email=$("#email").value.trim();
+    localStorage.setItem("pt_idToken",token); localStorage.setItem("pt_email",S.email);
+    await boot();
+  }catch(err){
+    errBox.textContent = err.message; errBox.style.display="block";
+    btn.disabled=false; btn.textContent="Iniciar sesión";
+  }
+});
+
+async function boot(){
+  $("#login").style.display="none";
+  $("#app").style.display="block";
+  $("#userEmail").textContent=S.email||"";
+  $("#avatar").textContent=(S.email||"A")[0].toUpperCase();
+  setLoading();
+  try{
+    await loadBuildings();
+    await loadBuildingData();
+    render();
+  }catch(e){
+    if(/Unauthorized|token|expired/i.test(e.message)){ logout(); return; }
+    $("#content").innerHTML=`<div class="empty"><div class="big">⚠️</div>${esc(e.message)}</div>`;
+  }
+}
+
+// auto-login si hay token guardado
+if(S.idToken){ boot(); }
+</script>
+</body>
+</html>
