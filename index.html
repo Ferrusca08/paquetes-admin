@@ -108,6 +108,32 @@
   .toast{position:fixed;bottom:24px;right:24px;background:var(--bg);color:#fff;padding:13px 18px;border-radius:10px;font-size:14px;z-index:100;opacity:0;transform:translateY(10px);transition:.25s;box-shadow:0 10px 30px rgba(0,0,0,.3)}
   .toast.show{opacity:1;transform:translateY(0)}
   .toast.err{background:var(--red)}
+
+  /* ---------- RESPONSIVE ---------- */
+  .topbar-left{display:flex;align-items:center;gap:10px}
+  .hamburger{display:none;background:transparent;border:none;color:var(--slate);cursor:pointer;padding:6px;border-radius:8px;align-items:center;justify-content:center}
+  .hamburger:hover{background:var(--surface2)}
+  .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:25}
+  @media (max-width:768px){
+    .sidebar{transform:translateX(-100%);transition:transform .25s ease;z-index:30}
+    .sidebar.open{transform:translateX(0);box-shadow:0 0 50px rgba(0,0,0,.45)}
+    .main{margin-left:0}
+    .hamburger{display:inline-flex}
+    .sidebar-overlay.show{display:block}
+    .content{padding:18px 16px}
+    .topbar{padding:0 14px}
+    .topbar select{min-width:140px}
+    .card-body{overflow-x:auto;-webkit-overflow-scrolling:touch}
+    .card-head{flex-wrap:wrap;gap:10px}
+    .modal{width:100%}
+  }
+  @media (max-width:520px){
+    #userEmail{display:none}
+    .topbar select{min-width:108px}
+    .stats{grid-template-columns:repeat(2,1fr)}
+    .page-title{font-size:19px}
+    .row-actions{flex-wrap:wrap}
+  }
 </style>
 </head>
 <body>
@@ -144,12 +170,16 @@
       </nav>
       <div class="foot">PackTrack Admin · dev<br/>v1.0</div>
     </aside>
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
 
     <div class="main">
       <header class="topbar">
-        <div class="bsel">
-          <span class="muted" style="font-size:13px;font-weight:600">Edificio:</span>
-          <select id="buildingSel"></select>
+        <div class="topbar-left">
+          <button class="hamburger" id="hamburger" aria-label="Menú"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button>
+          <div class="bsel">
+            <span class="muted" style="font-size:13px;font-weight:600">Edificio:</span>
+            <select id="buildingSel"></select>
+          </div>
         </div>
         <div class="user">
           <span id="userEmail"></span>
@@ -677,6 +707,14 @@ document.querySelectorAll(".nav-item").forEach(n=>n.onclick=()=>{
 });
 $("#buildingSel").onchange = async e=>{ S.building=e.target.value; setLoading(); await loadBuildingData(); render(); };
 $("#logoutBtn").onclick = logout;
+
+/* ---- Sidebar responsive (off-canvas en móvil) ---- */
+const sidebarEl = document.querySelector(".sidebar");
+const overlayEl = $("#sidebarOverlay");
+function closeSidebar(){ sidebarEl.classList.remove("open"); overlayEl.classList.remove("show"); }
+$("#hamburger").onclick = ()=>{ sidebarEl.classList.add("open"); overlayEl.classList.add("show"); };
+overlayEl.onclick = closeSidebar;
+document.querySelectorAll(".nav-item").forEach(n=> n.addEventListener("click", closeSidebar));
 
 $("#loginForm").addEventListener("submit", async e=>{
   e.preventDefault();
