@@ -134,6 +134,19 @@
     .page-title{font-size:19px}
     .row-actions{flex-wrap:wrap}
   }
+
+  /* ---------- CALENDAR ---------- */
+  .cal-head{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:6px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;text-align:center}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+  .cal-cell{min-height:86px;border:1px solid var(--border);border-radius:9px;padding:6px;background:#fff;font-size:11px;overflow:hidden}
+  .cal-cell.empty{background:transparent;border:none}
+  .cal-cell.has{cursor:pointer;border-color:#dfe3ff}
+  .cal-cell.has:hover{background:#fafbff}
+  .cal-cell.today{border-color:var(--primary);box-shadow:inset 0 0 0 1px var(--primary)}
+  .cal-d{font-weight:700;font-size:12px;color:var(--slate);margin-bottom:4px}
+  .cal-chip{background:#eef0fe;color:var(--primary-d);border-radius:5px;padding:2px 5px;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+  .cal-more{color:var(--muted);font-size:10px;font-weight:600}
+  @media(max-width:640px){ .cal-cell{min-height:58px;font-size:10px;padding:4px} .cal-chip{font-size:9px;padding:1px 4px} }
 </style>
 </head>
 <body>
@@ -166,6 +179,7 @@
         <div class="nav-item" data-view="packages"><span class="ico"></span> Paquetes</div>
         <div class="nav-item" data-view="residents"><span class="ico"></span> Residentes</div>
         <div class="nav-item" data-view="guards"><span class="ico"></span> Guardias</div>
+        <div class="nav-item" data-view="amenities"><span class="ico"></span> Amenidades</div>
         <div class="nav-item" data-view="buildings"><span class="ico"></span> Edificios</div>
       </nav>
       <div class="foot">PackTrack Admin · dev<br/>v1.0</div>
@@ -228,6 +242,8 @@ const S = {
   units: [],
   residents: [],
   guards: [],
+  amenities: [],
+  calMonth: null,
   view: "overview",
 };
 
@@ -282,6 +298,8 @@ const Q = {
   listResidents: `query($b:ID!){ listResidents(buildingId:$b,limit:500){ items{ id fullName phone email towerName unitNumber towerId unitId createdAt } } }`,
   listGuards: `query($b:ID!){ listGuards(buildingId:$b){ items{ id fullName email phone status createdAt } } }`,
   listPackages: `query($b:ID!,$s:PackageStatus!){ listPackagesByStatus(buildingId:$b,status:$s,limit:200){ items{ id residentName towerName unitNumber carrier trackingNumber pickupCode status createdAt deliveredAt } } }`,
+  listAmenities: `query($b:ID!){ listAmenities(buildingId:$b){ items{ id name category capacity slotMinutes openTime closeTime days status } } }`,
+  listReservations: `query($b:ID!,$f:String!,$t:String!){ listReservations(buildingId:$b,fromDate:$f,toDate:$t){ items{ id amenityName residentName towerName unitNumber date startTime endTime } } }`,
 };
 const M = {
   createBuilding: `mutation($i:CreateBuildingInput!){ createBuilding(input:$i){ id } }`,
@@ -294,6 +312,11 @@ const M = {
   deleteResident: `mutation($b:ID!,$r:ID!){ deleteResident(buildingId:$b,residentId:$r) }`,
   createGuard: `mutation($i:CreateGuardInput!){ createGuard(input:$i){ id fullName } }`,
   deleteGuard: `mutation($u:String!){ deleteGuard(username:$u) }`,
+  createAmenity: `mutation($i:CreateAmenityInput!){ createAmenity(input:$i){ id } }`,
+  updateAmenity: `mutation($i:UpdateAmenityInput!){ updateAmenity(input:$i){ id } }`,
+  setAmenityStatus: `mutation($b:ID!,$a:ID!,$s:AmenityStatus!){ setAmenityStatus(buildingId:$b,amenityId:$a,status:$s){ id status } }`,
+  deleteAmenity: `mutation($b:ID!,$a:ID!){ deleteAmenity(buildingId:$b,amenityId:$a) }`,
+  cancelReservation: `mutation($b:ID!,$r:ID!){ cancelReservation(buildingId:$b,reservationId:$r) }`,
 };
 
 /* ============================================================
@@ -313,9 +336,10 @@ const ICONS = {
   user:'<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
   upload:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
   alert:'<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+  calendar:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
 };
 function icon(name, size){ size=size||18; return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.18em">${ICONS[name]||''}</svg>`; }
-const NAV_ICON = { overview:'overview', packages:'package', residents:'users', guards:'shield', buildings:'home' };
+const NAV_ICON = { overview:'overview', packages:'package', residents:'users', guards:'shield', amenities:'calendar', buildings:'home' };
 document.querySelectorAll('.nav-item').forEach(n=>{ const ic=n.querySelector('.ico'); if(ic) ic.innerHTML=icon(NAV_ICON[n.dataset.view]||'package',18); });
 
 function fmtDate(d){ if(!d) return "—"; const x=new Date(d); return x.toLocaleDateString("es-MX",{day:"2-digit",month:"short",year:"numeric"}); }
@@ -367,6 +391,7 @@ async function render(){
   if(S.view==="packages") return renderPackages();
   if(S.view==="residents") return renderResidents();
   if(S.view==="guards") return renderGuards();
+  if(S.view==="amenities") return renderAmenities();
   if(S.view==="buildings") return renderBuildings();
 }
 
@@ -692,6 +717,137 @@ async function delBuilding(id,name){
     toast("Edificio eliminado");
     await loadBuildings(); await loadBuildingData(); render();
   }catch(e){ toast(e.message,"err"); }
+}
+
+/* ---- AMENITIES ---- */
+const DAY_LABELS = [["1","Lun"],["2","Mar"],["3","Mié"],["4","Jue"],["5","Vie"],["6","Sáb"],["0","Dom"]];
+const DAY_SHORT = ["D","L","M","M","J","V","S"];
+const MONTHS = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+
+async function renderAmenities(){
+  if(!S.building){ return emptyState("calendar","Selecciona un edificio"); }
+  setLoading();
+  try{ const a=await gql(Q.listAmenities,{b:S.building}); S.amenities=a.listAmenities.items||[]; }
+  catch(e){ $("#content").innerHTML=`<div class="card"><div class="card-body">${emptyHtml("alert",e.message)}</div></div>`; return; }
+  if(!S.calMonth){ const d=new Date(); S.calMonth={y:d.getFullYear(),m:d.getMonth()}; }
+  $("#content").innerHTML = `
+    <div class="page-title">Amenidades</div>
+    <div class="page-sub">${S.amenities.length} amenidades · reserva por bloques fijos</div>
+    <div class="card">
+      <div class="card-head"><h3>Amenidades del edificio</h3>
+        <button class="btn btn-sm" onclick="amenityForm()">+ Nueva amenidad</button></div>
+      <div class="card-body">
+        ${S.amenities.length? `<table>
+          <thead><tr><th>Nombre</th><th>Horario</th><th>Bloque</th><th>Cupo</th><th>Estado</th><th></th></tr></thead>
+          <tbody>${S.amenities.map(amenityRow).join("")}</tbody></table>` : emptyHtml("calendar","Crea tu primera amenidad")}
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h3>Calendario de reservas</h3>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="btn btn-ghost btn-sm" onclick="calMove(-1)">‹</button>
+          <strong id="calLabel" style="min-width:140px;text-align:center"></strong>
+          <button class="btn btn-ghost btn-sm" onclick="calMove(1)">›</button>
+        </div></div>
+      <div class="card-body" style="padding:16px"><div id="calWrap"><div class="loading"><div class="spinner"></div></div></div></div>
+    </div>`;
+  renderCalendar();
+}
+
+function amenityRow(am){
+  const days=(am.days||[]).slice().sort().map(d=>DAY_SHORT[d]).join(" ");
+  const active = am.status==="ACTIVE";
+  return `<tr>
+    <td><strong>${esc(am.name)}</strong>${am.category?`<br/><span class="muted" style="font-size:12px">${esc(am.category)}</span>`:""}</td>
+    <td class="muted">${esc(am.openTime)}–${esc(am.closeTime)}<br/><span style="font-size:12px">${days}</span></td>
+    <td class="muted">${am.slotMinutes} min</td>
+    <td class="muted">${am.capacity}</td>
+    <td>${active?'<span class="badge b-entregado"><span class="dot" style="background:var(--green)"></span>Activa</span>':'<span class="badge b-expirado"><span class="dot" style="background:var(--red)"></span>Fuera de servicio</span>'}</td>
+    <td><div class="row-actions">
+      <button class="btn btn-ghost btn-sm" onclick='amenityForm(${JSON.stringify(am)})'>Editar</button>
+      <button class="btn btn-ghost btn-sm" onclick="toggleAmenity('${am.id}','${active?'OUT_OF_SERVICE':'ACTIVE'}')">${active?'Fuera de servicio':'Activar'}</button>
+      <button class="btn btn-danger btn-sm" onclick="delAmenity('${am.id}','${esc(am.name)}')">Eliminar</button>
+    </div></td>
+  </tr>`;
+}
+
+function amenityForm(am){
+  const isEdit=!!am; am=am||{days:[1,2,3,4,5,6,0]};
+  const sel=new Set(am.days||[]);
+  openModal(isEdit?"Editar amenidad":"Nueva amenidad",`
+    <div class="field"><label>Nombre</label><input id="a_name" value="${esc(am.name||"")}" placeholder="Alberca, Salón, Cancha, Cine..."/></div>
+    <div class="field"><label>Categoría</label><input id="a_cat" value="${esc(am.category||"")}" placeholder="Alberca / Salón / Deporte..."/></div>
+    <div style="display:flex;gap:10px">
+      <div class="field" style="flex:1"><label>Abre</label><input id="a_open" type="time" value="${esc(am.openTime||"08:00")}"/></div>
+      <div class="field" style="flex:1"><label>Cierra</label><input id="a_close" type="time" value="${esc(am.closeTime||"22:00")}"/></div>
+    </div>
+    <div style="display:flex;gap:10px">
+      <div class="field" style="flex:1"><label>Duración bloque (min)</label><input id="a_slot" type="number" min="5" step="5" value="${am.slotMinutes||60}"/></div>
+      <div class="field" style="flex:1"><label>Cupo por bloque</label><input id="a_cap" type="number" min="1" value="${am.capacity||1}"/></div>
+    </div>
+    <div class="field"><label>Días disponibles</label>
+      <div id="a_days" style="display:flex;gap:6px;flex-wrap:wrap">
+        ${DAY_LABELS.map(([v,l])=>`<label style="display:flex;align-items:center;gap:5px;font-size:13px;border:1px solid var(--border);border-radius:8px;padding:6px 10px;cursor:pointer"><input type="checkbox" value="${v}" ${sel.has(+v)?"checked":""}/> ${l}</label>`).join("")}
+      </div></div>
+  `,`<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn" id="a_save">Guardar</button>`);
+  $("#a_save").onclick=async()=>{
+    const name=$("#a_name").value.trim();
+    if(!name){ toast("El nombre es obligatorio","err"); return; }
+    const days=[...document.querySelectorAll('#a_days input:checked')].map(c=>+c.value);
+    if(!days.length){ toast("Selecciona al menos un día","err"); return; }
+    if($("#a_close").value <= $("#a_open").value){ toast("El cierre debe ser después de la apertura","err"); return; }
+    const data={ name, category:$("#a_cat").value.trim()||null, capacity:+$("#a_cap").value, slotMinutes:+$("#a_slot").value, openTime:$("#a_open").value, closeTime:$("#a_close").value, days };
+    $("#a_save").disabled=true;
+    try{
+      if(isEdit) await gql(M.updateAmenity,{i:{id:am.id,buildingId:S.building,...data}});
+      else await gql(M.createAmenity,{i:{buildingId:S.building,...data}});
+      closeModal(); toast("Amenidad guardada"); renderAmenities();
+    }catch(e){ toast(e.message,"err"); $("#a_save").disabled=false; }
+  };
+}
+async function toggleAmenity(id,status){ try{ await gql(M.setAmenityStatus,{b:S.building,a:id,s:status}); toast("Estado actualizado"); renderAmenities(); }catch(e){ toast(e.message,"err"); } }
+async function delAmenity(id,name){ if(!confirm(`¿Eliminar "${name}"? Las reservas existentes se conservan.`)) return; try{ await gql(M.deleteAmenity,{b:S.building,a:id}); toast("Amenidad eliminada"); renderAmenities(); }catch(e){ toast(e.message,"err"); } }
+
+/* ---- Calendar ---- */
+function calMove(d){ let {y,m}=S.calMonth; m+=d; if(m<0){m=11;y--;} if(m>11){m=0;y++;} S.calMonth={y,m}; renderCalendar(); }
+async function renderCalendar(){
+  const {y,m}=S.calMonth, pad=n=>String(n).padStart(2,"0");
+  $("#calLabel").textContent=`${MONTHS[m]} ${y}`;
+  const last=new Date(y,m+1,0).getDate();
+  const from=`${y}-${pad(m+1)}-01`, to=`${y}-${pad(m+1)}-${pad(last)}`;
+  let items=[];
+  try{ const r=await gql(Q.listReservations,{b:S.building,f:from,t:to}); items=r.listReservations.items||[]; }
+  catch(e){ $("#calWrap").innerHTML=`<div class="muted">${esc(e.message)}</div>`; return; }
+  const byDay={}; items.forEach(r=>{ (byDay[r.date]=byDay[r.date]||[]).push(r); });
+  S._resByDay=byDay;
+  const firstDow=new Date(y,m,1).getDay();
+  const todayStr=(()=>{const d=new Date();return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;})();
+  let cells="";
+  for(let i=0;i<firstDow;i++) cells+=`<div class="cal-cell empty"></div>`;
+  for(let d=1;d<=last;d++){
+    const ds=`${y}-${pad(m+1)}-${pad(d)}`;
+    const rs=(byDay[ds]||[]).slice().sort((a,b)=>a.startTime.localeCompare(b.startTime));
+    const chips=rs.slice(0,3).map(r=>`<div class="cal-chip" title="${esc(r.amenityName)} · ${esc(r.startTime)} · ${esc(r.residentName)}">${esc(r.startTime)} ${esc(r.amenityName)}</div>`).join("");
+    const more=rs.length>3?`<div class="cal-more">+${rs.length-3} más</div>`:"";
+    cells+=`<div class="cal-cell${rs.length?' has':''}${ds===todayStr?' today':''}" ${rs.length?`onclick="calDay('${ds}')"`:""}><div class="cal-d">${d}</div>${chips}${more}</div>`;
+  }
+  $("#calWrap").innerHTML=`<div class="cal-head">${["Dom","Lun","Mar","Mié","Jue","Vie","Sáb"].map(n=>`<div>${n}</div>`).join("")}</div><div class="cal-grid">${cells}</div>`;
+}
+function calDay(ds){
+  const rs=((S._resByDay||{})[ds]||[]).slice().sort((a,b)=>a.startTime.localeCompare(b.startTime));
+  const body=rs.length? rs.map(r=>`
+    <div style="border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <strong>${esc(r.amenityName)}</strong><span class="code">${esc(r.startTime)}–${esc(r.endTime)}</span>
+      </div>
+      <div class="muted" style="font-size:13px;margin-top:4px">${esc(r.residentName)} · ${esc(r.towerName||"")} ${esc(r.unitNumber||"")}</div>
+      <button class="btn btn-danger btn-sm" style="margin-top:9px" onclick="adminCancel('${r.id}','${esc(r.residentName)}')">Cancelar reserva</button>
+    </div>`).join("") : '<div class="muted">Sin reservas</div>';
+  openModal(`Reservas · ${ds}`, body, `<button class="btn btn-ghost" onclick="closeModal()">Cerrar</button>`);
+}
+async function adminCancel(id,who){
+  if(!confirm(`¿Cancelar la reserva de ${who}?`)) return;
+  try{ await gql(M.cancelReservation,{b:S.building,r:id}); toast("Reserva cancelada"); closeModal(); renderAmenities(); }catch(e){ toast(e.message,"err"); }
 }
 
 /* ---- empty helpers ---- */
