@@ -108,6 +108,60 @@ export interface ResidentItem {
   createdAt: string;
 }
 
+export enum AmenityStatus {
+  ACTIVE = "ACTIVE",
+  OUT_OF_SERVICE = "OUT_OF_SERVICE",
+}
+
+export interface AmenityItem {
+  PK: string;
+  SK: string;
+  entityType: "AMENITY";
+  id: string;
+  buildingId: string;
+  name: string;
+  category?: string;
+  description?: string;
+  capacity: number; // cupo por bloque (1 = exclusivo)
+  slotMinutes: number; // duración del bloque
+  openTime: string; // HH:MM
+  closeTime: string; // HH:MM
+  days: number[]; // 0=domingo … 6=sábado
+  status: AmenityStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReservationItem {
+  PK: string;
+  SK: string;
+  gsi1pk: string;
+  gsi1sk: string;
+  gsi2pk: string;
+  gsi2sk: string;
+  entityType: "RESERVATION";
+  id: string;
+  buildingId: string;
+  amenityId: string;
+  amenityName: string;
+  residentId: string;
+  residentName: string;
+  towerName?: string;
+  unitNumber?: string;
+  date: string; // YYYY-MM-DD
+  startTime: string; // HH:MM
+  endTime: string; // HH:MM
+  guests?: number;
+  createdAt: string;
+}
+
+export interface SlotCounterItem {
+  PK: string;
+  SK: string;
+  entityType: "SLOT";
+  count: number;
+}
+
 // ─── AppSync Event Types ─────────────────────────────────────────────────
 
 export interface AppSyncResolverEvent<TArgs = Record<string, unknown>> {
@@ -193,4 +247,37 @@ export interface UpdateResidentInput {
   fullName?: string;
   phone?: string;
   email?: string;
+}
+
+export interface CreateAmenityInput {
+  buildingId: string;
+  name: string;
+  category?: string;
+  description?: string;
+  capacity: number;
+  slotMinutes: number;
+  openTime: string;
+  closeTime: string;
+  days: number[];
+}
+
+export interface UpdateAmenityInput {
+  id: string;
+  buildingId: string;
+  name?: string;
+  category?: string;
+  description?: string;
+  capacity?: number;
+  slotMinutes?: number;
+  openTime?: string;
+  closeTime?: string;
+  days?: number[];
+}
+
+export interface CreateReservationInput {
+  buildingId: string;
+  amenityId: string;
+  date: string; // YYYY-MM-DD
+  startTime: string; // HH:MM
+  guests?: number;
 }

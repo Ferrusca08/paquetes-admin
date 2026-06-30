@@ -38,6 +38,14 @@ export default function ResidentLayout() {
         }}
       />
       <Tabs.Screen
+        name="amenities"
+        options={{
+          title: 'Amenidades',
+          tabBarLabel: 'Amenidades',
+          tabBarIcon: ({ color }) => <Feather name="calendar" size={20} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="history"
         options={{
           title: 'Historial',

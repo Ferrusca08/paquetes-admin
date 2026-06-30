@@ -43,6 +43,9 @@ locals {
     process-label = {
       description = "OCR label processing with AWS Textract"
     }
+    amenities-resolver = {
+      description = "Multi-resolver for amenities and reservations"
+    }
   }
 }
 
@@ -102,6 +105,8 @@ resource "aws_iam_role_policy" "dynamodb" {
           "dynamodb:Scan",
           "dynamodb:BatchGetItem",
           "dynamodb:BatchWriteItem",
+          "dynamodb:TransactWriteItems",
+          "dynamodb:TransactGetItems",
         ]
         Resource = [
           var.dynamodb_table_arn,

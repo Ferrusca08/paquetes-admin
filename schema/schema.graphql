@@ -103,6 +103,51 @@ type Guard {
   createdAt: AWSDateTime
 }
 
+enum AmenityStatus {
+  ACTIVE
+  OUT_OF_SERVICE
+}
+
+type Amenity {
+  id: ID!
+  buildingId: ID!
+  name: String!
+  category: String
+  description: String
+  capacity: Int!
+  slotMinutes: Int!
+  openTime: String!
+  closeTime: String!
+  days: [Int!]!
+  status: AmenityStatus!
+  createdAt: AWSDateTime!
+  updatedAt: AWSDateTime!
+}
+
+type Reservation {
+  id: ID!
+  buildingId: ID!
+  amenityId: ID!
+  amenityName: String!
+  residentId: ID!
+  residentName: String!
+  towerName: String
+  unitNumber: String
+  date: String!
+  startTime: String!
+  endTime: String!
+  guests: Int
+  createdAt: AWSDateTime!
+}
+
+type AmenitySlot {
+  startTime: String!
+  endTime: String!
+  capacity: Int!
+  reserved: Int!
+  available: Int!
+}
+
 type OCRResult {
   suggestedName: String
   suggestedTowerName: String
@@ -150,6 +195,16 @@ type BuildingConnection {
 
 type GuardConnection {
   items: [Guard!]!
+  nextToken: String
+}
+
+type AmenityConnection {
+  items: [Amenity!]!
+  nextToken: String
+}
+
+type ReservationConnection {
+  items: [Reservation!]!
   nextToken: String
 }
 
@@ -240,6 +295,39 @@ input CreateGuardInput {
   phone: String
 }
 
+input CreateAmenityInput {
+  buildingId: ID!
+  name: String!
+  category: String
+  description: String
+  capacity: Int!
+  slotMinutes: Int!
+  openTime: String!
+  closeTime: String!
+  days: [Int!]!
+}
+
+input UpdateAmenityInput {
+  id: ID!
+  buildingId: ID!
+  name: String
+  category: String
+  description: String
+  capacity: Int
+  slotMinutes: Int
+  openTime: String
+  closeTime: String
+  days: [Int!]
+}
+
+input CreateReservationInput {
+  buildingId: ID!
+  amenityId: ID!
+  date: String!
+  startTime: String!
+  guests: Int
+}
+
 # ============================================================
 # QUERIES
 # ============================================================
@@ -290,6 +378,12 @@ type Query {
     query: String!
     limit: Int
   ): ResidentConnection!
+
+  # --- Amenities ---
+  listAmenities(buildingId: ID!): AmenityConnection!
+  getAmenityAvailability(buildingId: ID!, amenityId: ID!, date: String!): [AmenitySlot!]!
+  listMyReservations(residentId: ID!): ReservationConnection!
+  listReservations(buildingId: ID!, fromDate: String!, toDate: String!): ReservationConnection!
 }
 
 # ============================================================
@@ -326,6 +420,16 @@ type Mutation {
   # --- Guards (staff Cognito users) ---
   createGuard(input: CreateGuardInput!): Guard!
   deleteGuard(username: String!): ID!
+
+  # --- Amenities (admin) ---
+  createAmenity(input: CreateAmenityInput!): Amenity!
+  updateAmenity(input: UpdateAmenityInput!): Amenity!
+  setAmenityStatus(buildingId: ID!, amenityId: ID!, status: AmenityStatus!): Amenity!
+  deleteAmenity(buildingId: ID!, amenityId: ID!): ID!
+
+  # --- Reservations ---
+  createReservation(input: CreateReservationInput!): Reservation!
+  cancelReservation(buildingId: ID!, reservationId: ID!): ID!
 
   # --- Notifications ---
   registerPushToken(residentId: ID!, buildingId: ID!, pushToken: String!): Boolean!

@@ -22,6 +22,12 @@ export const SK = {
   unit: (id: string) => `UNIT#${id}`,
   resident: (id: string) => `RES#${id}`,
   package: (id: string) => `PKG#${id}`,
+  amenity: (id: string) => `AMEN#${id}`,
+  reservation: (id: string) => `RESV#${id}`,
+  /** Slot capacity counter: SLOT#<amenityId>#<date>#<startTime> */
+  slot: (amenityId: string, date: string, startTime: string) =>
+    `SLOT#${amenityId}#${date}#${startTime}`,
+  slotPrefix: (amenityId: string, date: string) => `SLOT#${amenityId}#${date}#`,
 } as const;
 
 // ─── GSI Key Builders ────────────────────────────────────────────────────
@@ -42,6 +48,11 @@ export const GSI1 = {
     gsi1pk: `TWR#${towerId}`,
     gsi1sk: `UNIT#${unitId}`,
   }),
+  /** Resident's reservations: gsi1pk = RES#<id>, gsi1sk = RESV#<date>#<startTime> */
+  reservationByResident: (residentId: string, date: string, startTime: string) => ({
+    gsi1pk: `RES#${residentId}`,
+    gsi1sk: `RESV#${date}#${startTime}`,
+  }),
 } as const;
 
 export const GSI2 = {
@@ -49,6 +60,11 @@ export const GSI2 = {
   packageByStatus: (buildingId: string, status: string, createdAt: string) => ({
     gsi2pk: `BLDG#${buildingId}#ST#${status}`,
     gsi2sk: createdAt,
+  }),
+  /** Building reservations (admin calendar): gsi2pk = BLDG#<id>#RESV, gsi2sk = <date>#<startTime> */
+  reservationByBuilding: (buildingId: string, date: string, startTime: string) => ({
+    gsi2pk: `BLDG#${buildingId}#RESV`,
+    gsi2sk: `${date}#${startTime}`,
   }),
 } as const;
 

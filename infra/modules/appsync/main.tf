@@ -188,6 +188,35 @@ resource "aws_appsync_resolver" "admin" {
 }
 
 # -----------------------------------------------------------------------------
+# Resolvers — Amenities multi-resolver
+# -----------------------------------------------------------------------------
+locals {
+  amenities_resolver_fields = {
+    # Queries
+    "Query-listAmenities"          = { type = "Query",    field = "listAmenities" }
+    "Query-getAmenityAvailability" = { type = "Query",    field = "getAmenityAvailability" }
+    "Query-listMyReservations"     = { type = "Query",    field = "listMyReservations" }
+    "Query-listReservations"       = { type = "Query",    field = "listReservations" }
+    # Mutations
+    "Mutation-createAmenity"     = { type = "Mutation", field = "createAmenity" }
+    "Mutation-updateAmenity"     = { type = "Mutation", field = "updateAmenity" }
+    "Mutation-setAmenityStatus"  = { type = "Mutation", field = "setAmenityStatus" }
+    "Mutation-deleteAmenity"     = { type = "Mutation", field = "deleteAmenity" }
+    "Mutation-createReservation" = { type = "Mutation", field = "createReservation" }
+    "Mutation-cancelReservation" = { type = "Mutation", field = "cancelReservation" }
+  }
+}
+
+resource "aws_appsync_resolver" "amenities" {
+  for_each = contains(keys(var.lambda_function_arns), "amenities-resolver") ? local.amenities_resolver_fields : {}
+
+  api_id      = aws_appsync_graphql_api.main.id
+  type        = each.value.type
+  field       = each.value.field
+  data_source = aws_appsync_datasource.lambda["amenities-resolver"].name
+}
+
+# -----------------------------------------------------------------------------
 # Resolvers — Subscriptions (NONE data source, local resolvers)
 # -----------------------------------------------------------------------------
 locals {

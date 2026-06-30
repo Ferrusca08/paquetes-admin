@@ -143,6 +143,51 @@ export const processLabel = /* GraphQL */ `
   }
 `;
 
+// ─── Amenities (resident) ─────────────────────────────────────
+
+export const listAmenities = /* GraphQL */ `
+  query ListAmenities($buildingId: ID!) {
+    listAmenities(buildingId: $buildingId) {
+      items {
+        id name category description capacity slotMinutes
+        openTime closeTime days status
+      }
+    }
+  }
+`;
+
+export const getAmenityAvailability = /* GraphQL */ `
+  query GetAmenityAvailability($buildingId: ID!, $amenityId: ID!, $date: String!) {
+    getAmenityAvailability(buildingId: $buildingId, amenityId: $amenityId, date: $date) {
+      startTime endTime capacity reserved available
+    }
+  }
+`;
+
+export const listMyReservations = /* GraphQL */ `
+  query ListMyReservations($residentId: ID!) {
+    listMyReservations(residentId: $residentId) {
+      items {
+        id amenityName date startTime endTime guests createdAt
+      }
+    }
+  }
+`;
+
+export const createReservation = /* GraphQL */ `
+  mutation CreateReservation($input: CreateReservationInput!) {
+    createReservation(input: $input) {
+      id amenityName date startTime endTime
+    }
+  }
+`;
+
+export const cancelReservation = /* GraphQL */ `
+  mutation CancelReservation($buildingId: ID!, $reservationId: ID!) {
+    cancelReservation(buildingId: $buildingId, reservationId: $reservationId)
+  }
+`;
+
 // ─── Subscriptions ────────────────────────────────────────────
 
 export const onPackageRegistered = /* GraphQL */ `
