@@ -165,8 +165,8 @@ export const getAmenityAvailability = /* GraphQL */ `
 `;
 
 export const listMyReservations = /* GraphQL */ `
-  query ListMyReservations($residentId: ID!) {
-    listMyReservations(residentId: $residentId) {
+  query ListMyReservations($residentId: ID!, $includePast: Boolean) {
+    listMyReservations(residentId: $residentId, includePast: $includePast) {
       items {
         id amenityName date startTime endTime guests createdAt
       }

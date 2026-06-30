@@ -451,8 +451,10 @@ async function cancelReservation(
   return reservationId;
 }
 
-async function listMyReservations(event: AppSyncResolverEvent<{ residentId: string }>) {
-  const { residentId } = event.arguments;
+async function listMyReservations(
+  event: AppSyncResolverEvent<{ residentId: string; includePast?: boolean }>,
+) {
+  const { residentId, includePast } = event.arguments;
   const r = await docClient.send(
     new QueryCommand({
       TableName: TABLE_NAME,
@@ -462,11 +464,13 @@ async function listMyReservations(event: AppSyncResolverEvent<{ residentId: stri
     }),
   );
   const today = nowLocal().date;
-  const items = (r.Items as ReservationItem[])
-    .filter((x) => x.date >= today) // upcoming only
-    .sort((a, b) => `${a.date}${a.startTime}`.localeCompare(`${b.date}${b.startTime}`))
-    .map(reservationOut);
-  return { items, nextToken: null };
+  let items = r.Items as ReservationItem[];
+  if (!includePast) items = items.filter((x) => x.date >= today); // upcoming only
+  const key = (x: ReservationItem) => `${x.date}${x.startTime}`;
+  items.sort((a, b) =>
+    includePast ? key(b).localeCompare(key(a)) /* newest first */ : key(a).localeCompare(key(b)),
+  );
+  return { items: items.map(reservationOut), nextToken: null };
 }
 
 async function listReservations(

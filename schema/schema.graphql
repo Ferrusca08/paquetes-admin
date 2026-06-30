@@ -383,7 +383,7 @@ type Query {
   # --- Amenities ---
   listAmenities(buildingId: ID!): AmenityConnection!
   getAmenityAvailability(buildingId: ID!, amenityId: ID!, date: String!): [AmenitySlot!]!
-  listMyReservations(residentId: ID!): ReservationConnection!
+  listMyReservations(residentId: ID!, includePast: Boolean): ReservationConnection!
   listReservations(buildingId: ID!, fromDate: String!, toDate: String!): ReservationConnection!
 }
 
