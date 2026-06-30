@@ -138,14 +138,23 @@ export default function AmenitiesScreen() {
     try {
       await client.graphql({
         query: createReservation,
-        variables: { input: { buildingId: user!.buildingId, amenityId: picked.id, date: ymd(date), startTime: slot.startTime } },
+        variables: {
+          input: {
+            buildingId: user!.buildingId,
+            amenityId: picked.id,
+            residentId: user!.residentId,
+            date: ymd(date),
+            startTime: slot.startTime,
+          },
+        },
       });
       closeReserve();
       await load();
       setTab('active');
       Alert.alert('Reserva confirmada', `${picked.name} · ${ymd(date)} ${slot.startTime}`);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'No se pudo reservar';
+      const gqlMsg = (e as { errors?: { message?: string }[] })?.errors?.[0]?.message;
+      const msg = gqlMsg || (e instanceof Error ? e.message : 'No se pudo reservar');
       Alert.alert('No se pudo reservar', msg.replace(/^.*?:\s*/, ''));
       // refresh slots so a taken block updates
       pickDate(picked, date);

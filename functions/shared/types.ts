@@ -277,6 +277,7 @@ export interface UpdateAmenityInput {
 export interface CreateReservationInput {
   buildingId: string;
   amenityId: string;
+  residentId: string;
   date: string; // YYYY-MM-DD
   startTime: string; // HH:MM
   guests?: number;

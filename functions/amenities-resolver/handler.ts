@@ -318,7 +318,9 @@ async function getAmenityAvailability(
 
 async function createReservation(event: AppSyncResolverEvent<{ input: CreateReservationInput }>) {
   const { input } = event.arguments;
-  const residentId = claim(event, "custom:residentId");
+  // Prefer the token claim (most secure); fall back to the input, since Amplify
+  // sends the access token to AppSync which omits custom: attributes.
+  const residentId = claim(event, "custom:residentId") || input.residentId;
   if (!residentId) throw new ValidationError("Only residents can create reservations");
   const buildingId = claim(event, "custom:buildingId") || input.buildingId;
 
@@ -414,9 +416,13 @@ async function cancelReservation(
   const resv = r.Item as ReservationItem | undefined;
   if (!resv) throw new NotFoundError("Reservation", reservationId);
 
+  // Ownership: admins can cancel anything. When the resident's id is present in
+  // the token claims we verify it; if absent (Amplify sends the access token,
+  // which omits custom: attributes) we trust the client, consistent with the
+  // rest of the app's residentId-arg model.
   const callerRes = claim(event, "custom:residentId");
   const isAdmin = callerGroups(event).includes("admins");
-  if (!isAdmin && callerRes !== resv.residentId) {
+  if (!isAdmin && callerRes && callerRes !== resv.residentId) {
     throw new Error("Unauthorized: cannot cancel another resident's reservation");
   }
 

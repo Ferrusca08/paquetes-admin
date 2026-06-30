@@ -323,6 +323,7 @@ input UpdateAmenityInput {
 input CreateReservationInput {
   buildingId: ID!
   amenityId: ID!
+  residentId: ID!
   date: String!
   startTime: String!
   guests: Int
