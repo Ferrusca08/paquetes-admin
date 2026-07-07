@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>PackTrack · Gafete de Visita</title>
+<style>
+  :root{
+    --primary:#2563eb; --primary-d:#1d4ed8; --text:#0f172a; --muted:#64748b;
+    --border:#e2e8f0; --green:#16a34a; --bg:#eef2ff;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:linear-gradient(160deg,#1e293b,#2563eb);color:var(--text);
+    min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;
+  }
+  .card{
+    background:#fff;border-radius:22px;width:360px;max-width:100%;
+    box-shadow:0 25px 60px rgba(0,0,0,.35);overflow:hidden;
+  }
+  .head{
+    background:var(--primary);color:#fff;padding:22px 24px;text-align:center;
+  }
+  .head .logo{font-size:20px;font-weight:800;letter-spacing:.02em}
+  .head .logo span{opacity:.85}
+  .head .tag{font-size:12px;text-transform:uppercase;letter-spacing:.14em;opacity:.85;margin-top:4px}
+  .body{padding:26px 24px 30px;text-align:center}
+  .label{font-size:11px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);font-weight:700}
+  .name{font-size:26px;font-weight:800;margin:6px 0 2px;line-height:1.2}
+  .dept{font-size:15px;color:var(--muted);margin-bottom:20px}
+  .status{
+    display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:700;
+    padding:5px 13px;border-radius:999px;background:#f0fdf4;color:var(--green);margin-bottom:22px;
+  }
+  .status .dot{width:8px;height:8px;border-radius:50%;background:var(--green)}
+  .status.ended{background:#f1f5f9;color:var(--muted)}
+  .status.ended .dot{background:var(--muted)}
+  .qr-wrap{display:inline-block;padding:14px;background:#fff;border:1px solid var(--border);border-radius:16px}
+  #qr img, #qr canvas{display:block}
+  .qr-hint{font-size:12px;color:var(--muted);margin-top:14px;line-height:1.5}
+  .foot{border-top:1px solid var(--border);padding:14px;text-align:center;font-size:11px;color:var(--muted)}
+  .loading,.error{padding:60px 24px;text-align:center;color:var(--muted)}
+  .spinner{width:30px;height:30px;border:3px solid var(--border);border-top-color:var(--primary);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 14px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="card" id="card">
+  <div class="loading"><div class="spinner"></div>Cargando gafete…</div>
+</div>
+
+<!-- QR generator (self-contained, no build) -->
+<script src="https://cdn.jsdelivr.net/gh/davidshimjs/qrcodejs@master/qrcode.min.js"></script>
+<script>
+/* ============================================================
+   CONFIG — public client values (no secrets beyond the API key,
+   which only grants access to getVisitBadge)
+   ============================================================ */
+const CFG = {
+  graphql: "https://rm7ud7ae3nc4zpsl5s6wlxmtbq.appsync-api.us-east-1.amazonaws.com/graphql",
+  // Filled from `terraform output -raw appsync_public_api_key` after apply.
+  apiKey: "da2-jug235dthvcsbe2le4t56xffs4",
+};
+
+const esc = s => (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+const Q_BADGE = `query($t:String!){ getVisitBadge(token:$t){ visitorName towerName unitNumber status badgeToken } }`;
+
+async function fetchBadge(token){
+  const res = await fetch(CFG.graphql, {
+    method:"POST",
+    headers:{ "Content-Type":"application/json", "x-api-key": CFG.apiKey },
+    body: JSON.stringify({ query: Q_BADGE, variables:{ t: token } }),
+  });
+  const data = await res.json();
+  if(data.errors) throw new Error(data.errors.map(e=>e.message).join("; "));
+  return data.data.getVisitBadge;
+}
+
+function renderError(msg){
+  document.getElementById("card").innerHTML =
+    `<div class="error"><div style="font-size:34px;margin-bottom:10px">⚠️</div>${esc(msg)}</div>`;
+}
+
+function renderBadge(b){
+  const dept = [b.towerName, b.unitNumber ? ("Depto "+b.unitNumber) : ""].filter(Boolean).join(" · ");
+  const ended = b.status === "ENDED";
+  document.getElementById("card").innerHTML = `
+    <div class="head">
+      <div class="logo">Pack<span>Track</span></div>
+      <div class="tag">Gafete de Visita</div>
+    </div>
+    <div class="body">
+      <div class="label">Visitante</div>
+      <div class="name">${esc(b.visitorName)}</div>
+      <div class="dept">${esc(dept || "—")}</div>
+      <div class="status ${ended?"ended":""}"><span class="dot"></span>${ended?"Visita finalizada":"Visita activa"}</div>
+      ${ended ? "" : `
+        <div class="qr-wrap"><div id="qr"></div></div>
+        <div class="qr-hint">Muestra este código al guardia al salir para finalizar tu visita.</div>
+      `}
+    </div>
+    <div class="foot">PackTrack · Control de acceso</div>`;
+
+  if(!ended){
+    // Checkout QR encodes the raw token; the guard's app resolves it.
+    new QRCode(document.getElementById("qr"), {
+      text: b.badgeToken, width: 200, height: 200,
+      colorDark:"#0f172a", colorLight:"#ffffff",
+    });
+  }
+}
+
+(async function init(){
+  const token = (location.hash || "").replace(/^#/, "").trim();
+  if(!token){ return renderError("Gafete inválido: falta el código."); }
+  try{
+    const b = await fetchBadge(token);
+    if(!b){ return renderError("No se encontró este gafete."); }
+    renderBadge(b);
+  }catch(e){
+    renderError("No se pudo cargar el gafete. " + (e.message||""));
+  }
+})();
+</script>
+</body>
+</html>
