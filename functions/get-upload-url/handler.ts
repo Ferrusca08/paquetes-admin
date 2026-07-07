@@ -18,7 +18,7 @@ const s3 = new S3Client({});
 const EXPIRATION_SECONDS = 300; // 5 minutes
 
 const ALLOWED_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "heic"]);
-const ALLOWED_PURPOSES = new Set(["label", "evidence"]);
+const ALLOWED_PURPOSES = new Set(["label", "evidence", "id"]);
 
 export const handler = async (
   event: AppSyncResolverEvent<{ input: GetUploadUrlInput }>,

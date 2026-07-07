@@ -26,3 +26,9 @@ output "none_datasource_name" {
   description = "NONE data source name (for local resolvers)"
   value       = aws_appsync_datasource.none.name
 }
+
+output "api_key" {
+  description = "Public API key for the visitor badge page (getVisitBadge)"
+  value       = aws_appsync_api_key.public.key
+  sensitive   = true
+}

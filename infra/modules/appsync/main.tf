@@ -19,6 +19,11 @@ resource "aws_appsync_graphql_api" "main" {
     aws_region     = var.aws_region
   }
 
+  # Secondary auth for the public visitor badge page (getVisitBadge @aws_api_key).
+  additional_authentication_provider {
+    authentication_type = "API_KEY"
+  }
+
   schema = var.schema
 
   # Enable CloudWatch logging for debugging
@@ -34,13 +39,28 @@ resource "aws_appsync_graphql_api" "main" {
 }
 
 # -----------------------------------------------------------------------------
+# API Key — public access for the visitor badge web page (getVisitBadge)
+# -----------------------------------------------------------------------------
+resource "aws_appsync_api_key" "public" {
+  api_id      = aws_appsync_graphql_api.main.id
+  description = "Public key for the visitor virtual badge page"
+  # AppSync caps API key lifetime at 365 days; Terraform rotates on apply after expiry.
+  expires = timeadd(timestamp(), "8760h")
+
+  lifecycle {
+    # Avoid a new key on every apply just because `timestamp()` moved.
+    ignore_changes = [expires]
+  }
+}
+
+# -----------------------------------------------------------------------------
 # NONE Data Source (for local resolvers / subscriptions)
 # -----------------------------------------------------------------------------
 resource "aws_appsync_datasource" "none" {
-  api_id           = aws_appsync_graphql_api.main.id
-  name             = "NoneDataSource"
-  type             = "NONE"
-  description      = "Placeholder data source for local resolvers and subscriptions"
+  api_id      = aws_appsync_graphql_api.main.id
+  name        = "NoneDataSource"
+  type        = "NONE"
+  description = "Placeholder data source for local resolvers and subscriptions"
 }
 
 # -----------------------------------------------------------------------------
@@ -134,36 +154,36 @@ resource "aws_appsync_resolver" "get_upload_url" {
 locals {
   packages_resolver_fields = {
     # Queries
-    "Query-getPackage"           = { type = "Query",    field = "getPackage" }
-    "Query-listPackagesByStatus" = { type = "Query",    field = "listPackagesByStatus" }
-    "Query-listMyPackages"       = { type = "Query",    field = "listMyPackages" }
-    "Query-verifyPickupCode"     = { type = "Query",    field = "verifyPickupCode" }
+    "Query-getPackage"           = { type = "Query", field = "getPackage" }
+    "Query-listPackagesByStatus" = { type = "Query", field = "listPackagesByStatus" }
+    "Query-listMyPackages"       = { type = "Query", field = "listMyPackages" }
+    "Query-verifyPickupCode"     = { type = "Query", field = "verifyPickupCode" }
     # Mutations
     "Mutation-markPackageReturned" = { type = "Mutation", field = "markPackageReturned" }
   }
 
   admin_resolver_fields = {
     # Queries
-    "Query-getBuilding"      = { type = "Query",    field = "getBuilding" }
-    "Query-listBuildings"    = { type = "Query",    field = "listBuildings" }
-    "Query-listTowers"       = { type = "Query",    field = "listTowers" }
-    "Query-listUnits"        = { type = "Query",    field = "listUnits" }
-    "Query-listResidents"    = { type = "Query",    field = "listResidents" }
-    "Query-searchResidents"  = { type = "Query",    field = "searchResidents" }
+    "Query-getBuilding"     = { type = "Query", field = "getBuilding" }
+    "Query-listBuildings"   = { type = "Query", field = "listBuildings" }
+    "Query-listTowers"      = { type = "Query", field = "listTowers" }
+    "Query-listUnits"       = { type = "Query", field = "listUnits" }
+    "Query-listResidents"   = { type = "Query", field = "listResidents" }
+    "Query-searchResidents" = { type = "Query", field = "searchResidents" }
     # Mutations
-    "Mutation-createBuilding"  = { type = "Mutation", field = "createBuilding" }
-    "Mutation-updateBuilding"  = { type = "Mutation", field = "updateBuilding" }
-    "Mutation-deleteBuilding"  = { type = "Mutation", field = "deleteBuilding" }
-    "Mutation-createTower"     = { type = "Mutation", field = "createTower" }
-    "Mutation-deleteTower"     = { type = "Mutation", field = "deleteTower" }
-    "Mutation-createUnit"      = { type = "Mutation", field = "createUnit" }
-    "Mutation-deleteUnit"      = { type = "Mutation", field = "deleteUnit" }
-    "Mutation-createResident"      = { type = "Mutation", field = "createResident" }
-    "Mutation-updateResident"      = { type = "Mutation", field = "updateResident" }
-    "Mutation-deleteResident"      = { type = "Mutation", field = "deleteResident" }
-    "Mutation-registerPushToken"   = { type = "Mutation", field = "registerPushToken" }
+    "Mutation-createBuilding"    = { type = "Mutation", field = "createBuilding" }
+    "Mutation-updateBuilding"    = { type = "Mutation", field = "updateBuilding" }
+    "Mutation-deleteBuilding"    = { type = "Mutation", field = "deleteBuilding" }
+    "Mutation-createTower"       = { type = "Mutation", field = "createTower" }
+    "Mutation-deleteTower"       = { type = "Mutation", field = "deleteTower" }
+    "Mutation-createUnit"        = { type = "Mutation", field = "createUnit" }
+    "Mutation-deleteUnit"        = { type = "Mutation", field = "deleteUnit" }
+    "Mutation-createResident"    = { type = "Mutation", field = "createResident" }
+    "Mutation-updateResident"    = { type = "Mutation", field = "updateResident" }
+    "Mutation-deleteResident"    = { type = "Mutation", field = "deleteResident" }
+    "Mutation-registerPushToken" = { type = "Mutation", field = "registerPushToken" }
     # Guards (Cognito-only staff users)
-    "Query-listGuards"     = { type = "Query",    field = "listGuards" }
+    "Query-listGuards"     = { type = "Query", field = "listGuards" }
     "Mutation-createGuard" = { type = "Mutation", field = "createGuard" }
     "Mutation-deleteGuard" = { type = "Mutation", field = "deleteGuard" }
   }
@@ -193,10 +213,10 @@ resource "aws_appsync_resolver" "admin" {
 locals {
   amenities_resolver_fields = {
     # Queries
-    "Query-listAmenities"          = { type = "Query",    field = "listAmenities" }
-    "Query-getAmenityAvailability" = { type = "Query",    field = "getAmenityAvailability" }
-    "Query-listMyReservations"     = { type = "Query",    field = "listMyReservations" }
-    "Query-listReservations"       = { type = "Query",    field = "listReservations" }
+    "Query-listAmenities"          = { type = "Query", field = "listAmenities" }
+    "Query-getAmenityAvailability" = { type = "Query", field = "getAmenityAvailability" }
+    "Query-listMyReservations"     = { type = "Query", field = "listMyReservations" }
+    "Query-listReservations"       = { type = "Query", field = "listReservations" }
     # Mutations
     "Mutation-createAmenity"     = { type = "Mutation", field = "createAmenity" }
     "Mutation-updateAmenity"     = { type = "Mutation", field = "updateAmenity" }
@@ -214,6 +234,29 @@ resource "aws_appsync_resolver" "amenities" {
   type        = each.value.type
   field       = each.value.field
   data_source = aws_appsync_datasource.lambda["amenities-resolver"].name
+}
+
+# -----------------------------------------------------------------------------
+# Resolvers — Visitors multi-resolver
+# -----------------------------------------------------------------------------
+locals {
+  visitors_resolver_fields = {
+    # Queries
+    "Query-listActiveVisits" = { type = "Query", field = "listActiveVisits" }
+    "Query-getVisitBadge"    = { type = "Query", field = "getVisitBadge" } # public (API key)
+    # Mutations
+    "Mutation-checkInVisit"  = { type = "Mutation", field = "checkInVisit" }
+    "Mutation-checkOutVisit" = { type = "Mutation", field = "checkOutVisit" }
+  }
+}
+
+resource "aws_appsync_resolver" "visitors" {
+  for_each = contains(keys(var.lambda_function_arns), "visitors-resolver") ? local.visitors_resolver_fields : {}
+
+  api_id      = aws_appsync_graphql_api.main.id
+  type        = each.value.type
+  field       = each.value.field
+  data_source = aws_appsync_datasource.lambda["visitors-resolver"].name
 }
 
 # -----------------------------------------------------------------------------

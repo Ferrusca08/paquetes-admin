@@ -22,11 +22,13 @@ import {
   DetectTextCommand,
   type TextDetection,
 } from "@aws-sdk/client-rekognition";
+import { S3Client, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { BUCKET_NAME } from "../shared/constants.js";
 import type { AppSyncResolverEvent } from "../shared/types.js";
 import { ValidationError } from "../shared/errors.js";
 
 const rekognition = new RekognitionClient({});
+const s3 = new S3Client({});
 
 // ─── Carrier Detection ───────────────────────────────────────────────────────
 
@@ -108,6 +110,104 @@ function looksLikeName(text: string): boolean {
   return words.every((w) => /^[A-Za-záéíóúÁÉÍÓÚñÑüÜ.,'-]+$/.test(w));
 }
 
+// ─── ID Card Name Extraction (Mexican INE and similar) ───────────────────────
+
+// Words that appear on an INE but are NOT part of the person's name.
+const ID_KEYWORDS =
+  /\b(instituto|nacional|electoral|credencial|para votar|nombre|domicilio|clave|curp|fecha|nacimiento|sexo|a[nñ]o|registro|estado|municipio|localidad|seccion|secci[oó]n|emision|emisi[oó]n|vigencia|mexico|m[eé]xico)\b/i;
+
+/** A line that is a plausible fragment of a person's name (letters only). */
+function looksLikeIdNameLine(line: string): boolean {
+  const t = line.trim();
+  if (t.length < 2 || /\d/.test(t)) return false;
+  if (ID_KEYWORDS.test(t)) return false;
+  return /^[A-Za-záéíóúÁÉÍÓÚñÑüÜ.'\- ]+$/.test(t) && t.replace(/\s/g, "").length >= 2;
+}
+
+/** A detected line with its normalized position on the card (0–1). */
+interface LineBox {
+  text: string;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+/** Section labels that mark the END of the name block on an INE. */
+const ID_SECTION_LABELS =
+  /\b(domicilio|clave|curp|fecha|nacimiento|sexo|registro|estado|municipio|localidad|seccion|secci[oó]n|emision|emisi[oó]n|vigencia)\b/i;
+
+function toLineBoxes(dets: TextDetection[]): LineBox[] {
+  return dets
+    .filter((d) => d.Type === "LINE" && d.DetectedText && d.Geometry?.BoundingBox)
+    .map((d) => {
+      const b = d.Geometry!.BoundingBox!;
+      return {
+        text: d.DetectedText!.trim(),
+        left: b.Left ?? 0,
+        top: b.Top ?? 0,
+        width: b.Width ?? 0,
+        height: b.Height ?? 0,
+      };
+    });
+}
+
+/**
+ * Extract the visitor's name from an ID card using the spatial layout that
+ * Rekognition reports (bounding boxes), not detection order — far more robust
+ * on the INE, whose name sits as up to three stacked lines under the "NOMBRE"
+ * label. Returns the best guess plus a list of plausible name lines so the
+ * guard can tap the right ones when the guess is off.
+ */
+function extractIdName(dets: TextDetection[]): {
+  suggestedName: string | null;
+  nameCandidates: string[];
+} {
+  const boxes = toLineBoxes(dets);
+
+  // All plausible name fragments (letters only, not keywords), top→bottom.
+  // These feed the guard's tap-to-pick fallback.
+  const nameCandidates = boxes
+    .filter((b) => looksLikeIdNameLine(b.text))
+    .sort((a, b) => a.top - b.top || a.left - b.left)
+    .map((b) => capitalizeWords(b.text));
+
+  // Anchor on the "NOMBRE" label's position.
+  const label = boxes.find((b) => /^\s*nombre\b/i.test(b.text));
+  if (label) {
+    // Where does the name block end? The next section label below the anchor.
+    const nextLabelTop = boxes
+      .filter((b) => b.top > label.top + label.height * 0.3 && ID_SECTION_LABELS.test(b.text))
+      .reduce((min, b) => Math.min(min, b.top), 1);
+
+    const block = boxes
+      .filter(
+        (b) =>
+          looksLikeIdNameLine(b.text) &&
+          b.top >= label.top - label.height * 0.3 && // at or below the label
+          b.top < nextLabelTop && // before the next section
+          b.left >= label.left - 0.06, // roughly the label's column (allow drift)
+      )
+      .sort((a, b) => a.top - b.top || a.left - b.left)
+      .slice(0, 3);
+
+    if (block.length) {
+      return { suggestedName: capitalizeWords(block.map((b) => b.text).join(" ")), nameCandidates };
+    }
+  }
+
+  // Fallback: the top-most cluster of name-like lines in the card's left half.
+  const cluster = boxes
+    .filter((b) => looksLikeIdNameLine(b.text) && b.left < 0.6 && b.top < 0.6)
+    .sort((a, b) => a.top - b.top || a.left - b.left)
+    .slice(0, 3);
+  const suggestedName = cluster.length
+    ? capitalizeWords(cluster.map((b) => b.text).join(" "))
+    : nameCandidates[0] ?? null;
+
+  return { suggestedName, nameCandidates };
+}
+
 function capitalizeWords(text: string): string {
   return text
     .toLowerCase()
@@ -117,9 +217,9 @@ function capitalizeWords(text: string): string {
 // ─── Handler ─────────────────────────────────────────────────────────────────
 
 export const handler = async (
-  event: AppSyncResolverEvent<{ input: { s3Key: string } }>,
+  event: AppSyncResolverEvent<{ input: { s3Key: string; docType?: string } }>,
 ) => {
-  const { s3Key } = event.arguments.input;
+  const { s3Key, docType } = event.arguments.input;
 
   if (!s3Key) {
     throw new ValidationError("s3Key is required");
@@ -152,6 +252,27 @@ export const handler = async (
         lineDetections.length /
         100
       : 0;
+
+  // ── Visitor ID card: extract only the name, then discard the image ─────────
+  if (docType === "id") {
+    const { suggestedName, nameCandidates } = extractIdName(lineDetections);
+    // Privacy: the ID photo is used for OCR only and must not be retained.
+    try {
+      await s3.send(new DeleteObjectCommand({ Bucket: BUCKET_NAME, Key: s3Key }));
+    } catch {
+      // Best-effort deletion; a bucket lifecycle rule on id/ is the safety net.
+    }
+    return {
+      suggestedName,
+      suggestedTowerName: null,
+      suggestedUnitNumber: null,
+      suggestedTrackingNumber: null,
+      suggestedCarrier: null,
+      nameCandidates,
+      rawText: null, // don't echo raw ID text back to the client
+      confidence: Math.round(avgConfidence * 100) / 100,
+    };
+  }
 
   // ── Detect carrier ─────────────────────────────────────────────────────────
   let suggestedCarrier: string | null = null;
@@ -198,6 +319,7 @@ export const handler = async (
     suggestedUnitNumber,
     suggestedTrackingNumber,
     suggestedCarrier,
+    nameCandidates: [], // ID-only field
     rawText,
     confidence: Math.round(avgConfidence * 100) / 100,
   };

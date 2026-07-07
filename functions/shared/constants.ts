@@ -24,6 +24,7 @@ export const SK = {
   package: (id: string) => `PKG#${id}`,
   amenity: (id: string) => `AMEN#${id}`,
   reservation: (id: string) => `RESV#${id}`,
+  visit: (id: string) => `VISIT#${id}`,
   /** Slot capacity counter: SLOT#<amenityId>#<date>#<startTime> */
   slot: (amenityId: string, date: string, startTime: string) =>
     `SLOT#${amenityId}#${date}#${startTime}`,
@@ -66,12 +67,21 @@ export const GSI2 = {
     gsi2pk: `BLDG#${buildingId}#RESV`,
     gsi2sk: `${date}#${startTime}`,
   }),
+  /** Active visits (guard/admin): gsi2pk = BLDG#<id>#VISIT#ACTIVE, gsi2sk = <checkInAt> */
+  visitByBuilding: (buildingId: string, checkInAt: string) => ({
+    gsi2pk: `BLDG#${buildingId}#VISIT#ACTIVE`,
+    gsi2sk: checkInAt,
+  }),
 } as const;
 
 export const GSI3 = {
   /** Pickup code lookup: gsi3pk = CODE#<pin> */
   pickupCode: (code: string) => ({
     gsi3pk: `CODE#${code}`,
+  }),
+  /** Visit badge lookup by token: gsi3pk = VISIT#<token> */
+  visitBadge: (token: string) => ({
+    gsi3pk: `VISIT#${token}`,
   }),
 } as const;
 

@@ -162,6 +162,33 @@ export interface SlotCounterItem {
   count: number;
 }
 
+export enum VisitStatus {
+  ACTIVE = "ACTIVE",
+  ENDED = "ENDED",
+}
+
+export interface VisitItem {
+  PK: string;
+  SK: string;
+  gsi2pk: string;
+  gsi2sk: string;
+  gsi3pk: string;
+  entityType: "VISIT";
+  id: string;
+  buildingId: string;
+  visitorName: string;
+  towerId: string;
+  towerName?: string;
+  unitId: string;
+  unitNumber?: string;
+  residentId?: string;
+  status: VisitStatus;
+  badgeToken: string;
+  checkInAt: string;
+  checkOutAt?: string;
+  registeredBy: string;
+}
+
 // ─── AppSync Event Types ─────────────────────────────────────────────────
 
 export interface AppSyncResolverEvent<TArgs = Record<string, unknown>> {
@@ -281,4 +308,12 @@ export interface CreateReservationInput {
   date: string; // YYYY-MM-DD
   startTime: string; // HH:MM
   guests?: number;
+}
+
+export interface CheckInVisitInput {
+  buildingId: string;
+  visitorName: string;
+  towerId: string;
+  unitId: string;
+  residentId?: string;
 }

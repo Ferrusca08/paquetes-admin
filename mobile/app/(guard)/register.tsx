@@ -38,10 +38,49 @@ type OCRResult = {
   suggestedUnitNumber?: string;
   suggestedTrackingNumber?: string;
   suggestedCarrier?: string;
+  rawText?: string;
   confidence?: number;
 };
 
 const client = generateClient();
+
+// ─── Fuzzy tower matching (1-A) ─────────────────────────────
+const norm = (s?: string) =>
+  (s ?? '')
+    .toString()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .trim()
+    .toUpperCase();
+
+function levenshtein(a: string, b: string): number {
+  const m = a.length, n = b.length;
+  if (!m) return n;
+  if (!n) return m;
+  const d = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    let prev = d[0];
+    d[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const tmp = d[j];
+      d[j] = Math.min(d[j] + 1, d[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
+      prev = tmp;
+    }
+  }
+  return d[n];
+}
+
+// 0..1 similarity between an OCR-read tower and a known tower name.
+function towerSim(ocr?: string, known?: string): number {
+  const a = norm(ocr), b = norm(known);
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  if (a.includes(b) || b.includes(a)) return 0.85;
+  const dist = levenshtein(a, b);
+  return 1 - dist / Math.max(a.length, b.length);
+}
+
+const TOWER_MATCH_THRESHOLD = 0.6;
 
 export default function RegisterPackageScreen() {
   const { user } = useAuth();
@@ -106,13 +145,24 @@ export default function RegisterPackageScreen() {
 
   const handleSearch = () => runSearch(query);
 
-  // Matches a resident by unit/department (more reliable than the name).
-  // Narrows by tower, then by name, when several residents share a unit.
-  const matchByUnit = useCallback(
-    async (unit: string, tower?: string, name?: string): Promise<boolean> => {
-      if (!user?.buildingId) return false;
-      const norm = (s?: string) => (s ?? '').toString().trim().toUpperCase();
+  // Resolves the destination resident from the OCR result by scoring EVERY
+  // resident against all available signals: the structured suggestions AND the
+  // raw OCR text. Carrier labels (Moova, DHL, e-commerce) embed the tower + unit
+  // in a free-form address line with no "Depto"/"#" keyword — so instead of
+  // relying on regex, we check whether each resident's real tower name and unit
+  // number actually appear in the scanned text. Robust to formatting, rotation
+  // noise, and street-number false positives (1-A fuzzy tower, 1-B scored).
+  // Returns 'selected' | 'ambiguous' | 'none'.
+  const resolveResident = useCallback(
+    async (ocr: OCRResult): Promise<'selected' | 'ambiguous' | 'none'> => {
+      if (!user?.buildingId) return 'none';
       try {
+        // ⚠️ MVP SHORTCUT — does not scale. Fetches every resident (capped at 500)
+        // and scores client-side: O(N) per scan, and residents beyond 500 are
+        // silently truncated → missed matches. Commercial phase: add a GSI on
+        // residents by unit (BLDG#<id>#U#<unit>) and a server-side resolver
+        // (matchResidentByLabel) that queries only the candidate units. Migrate
+        // before any building exceeds ~400 residents. See project memory.
         const result = await client.graphql({
           query: listResidents,
           variables: { buildingId: user.buildingId, limit: 500 },
@@ -120,30 +170,52 @@ export default function RegisterPackageScreen() {
         const all = (result as { data: { listResidents: { items: Resident[] } } })
           .data.listResidents.items;
 
-        let matches = all.filter((r) => norm(r.unitNumber) === norm(unit));
-        if (matches.length > 1 && tower) {
-          const byTower = matches.filter(
-            (r) => norm(r.towerName).includes(norm(tower)) || norm(tower).includes(norm(r.towerName)),
-          );
-          if (byTower.length) matches = byTower;
-        }
-        if (matches.length > 1 && name) {
-          const tokens = norm(name).split(/\s+/).filter(Boolean);
-          const byName = matches.filter((r) => tokens.some((t) => norm(r.fullName).includes(t)));
-          if (byName.length) matches = byName;
-        }
+        const textNorm = norm(ocr.rawText);
+        // Tokenize the raw text so a unit like "1003" matches as a whole token
+        // and not inside a tracking number (e.g. "…00100035").
+        const textTokens = new Set(textNorm.split(/[^0-9a-zñ]+/i).filter(Boolean));
+        const ocrUnit = norm(ocr.suggestedUnitNumber);
 
-        if (matches.length === 1) {
-          selectResident(matches[0]);
-          return true;
+        const scored = all
+          .map((r) => {
+            const unit = norm(r.unitNumber);
+            const tower = norm(r.towerName);
+            const resNameTokens = norm(r.fullName).split(/\s+/).filter((t) => t.length > 2);
+
+            const unitMatch = !!unit && ((!!ocrUnit && ocrUnit === unit) || textTokens.has(unit));
+            const towerMatch =
+              !!tower &&
+              ((!!ocr.suggestedTowerName &&
+                towerSim(ocr.suggestedTowerName, r.towerName) >= TOWER_MATCH_THRESHOLD) ||
+                textNorm.includes(tower));
+            const nameHits = resNameTokens.filter((t) => textTokens.has(t)).length;
+
+            let score = 0;
+            if (unitMatch) score += 3;
+            if (towerMatch) score += 2;
+            score += Math.min(nameHits, 3);
+            return { r, score, unitMatch, towerMatch, nameHits };
+          })
+          .filter((s) => s.score > 0)
+          .sort((a, b) => b.score - a.score);
+
+        if (scored.length === 0) return 'none';
+
+        const best = scored[0];
+        const runnerUp = scored[1];
+        // Confident when the unit matches AND it's corroborated by the tower or
+        // the name, and the winner is clearly ahead of the runner-up.
+        const strong = best.unitMatch && (best.towerMatch || best.nameHits >= 2);
+        const clear = best.score - (runnerUp?.score ?? 0) >= 2;
+
+        if (strong && clear) {
+          selectResident(best.r);
+          return 'selected';
         }
-        if (matches.length > 1) {
-          setResidents(matches); // let the guard pick among same-unit residents
-          return true;
-        }
-        return false;
+        setResidents(scored.slice(0, 6).map((s) => s.r)); // ranked candidates
+        return 'ambiguous';
       } catch {
-        return false;
+        return 'none';
       }
     },
     [user?.buildingId],
@@ -214,24 +286,21 @@ export default function RegisterPackageScreen() {
       if (ocr.suggestedCarrier) setCarrier(ocr.suggestedCarrier);
       if (ocr.suggestedTrackingNumber) setTrackingNumber(ocr.suggestedTrackingNumber);
 
-      // Core: match by unit/department first (more reliable than the name),
-      // then fall back to a name search.
-      let matched = false;
-      if (ocr.suggestedUnitNumber) {
-        matched = await matchByUnit(
-          ocr.suggestedUnitNumber,
-          ocr.suggestedTowerName,
-          ocr.suggestedName,
+      // Core: match the resident against ALL OCR signals (structured + raw text).
+      const result = await resolveResident(ocr);
+      if (result === 'ambiguous') {
+        Alert.alert(
+          'Confirma el destinatario',
+          'No se pudo identificar con certeza. Elige el correcto de la lista de abajo.',
         );
-      }
-      if (!matched) {
+      } else if (result === 'none') {
         if (ocr.suggestedName) {
           setQuery(ocr.suggestedName);
           await runSearch(ocr.suggestedName, true);
         } else {
           Alert.alert(
             'No se detectó al residente',
-            'No se pudo leer torre/depto ni el nombre. Búscalo manualmente abajo.',
+            'No se pudo leer los datos del destinatario. Búscalo manualmente abajo.',
           );
         }
       }

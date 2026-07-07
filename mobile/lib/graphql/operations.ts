@@ -138,7 +138,25 @@ export const processLabel = /* GraphQL */ `
   mutation ProcessLabel($input: ProcessLabelInput!) {
     processLabel(input: $input) {
       suggestedName suggestedTowerName suggestedUnitNumber
-      suggestedTrackingNumber suggestedCarrier rawText confidence
+      suggestedTrackingNumber suggestedCarrier nameCandidates rawText confidence
+    }
+  }
+`;
+
+// ─── Visits (guard) ───────────────────────────────────────────
+
+export const checkInVisit = /* GraphQL */ `
+  mutation CheckInVisit($input: CheckInVisitInput!) {
+    checkInVisit(input: $input) {
+      id visitorName towerName unitNumber status badgeToken checkInAt
+    }
+  }
+`;
+
+export const checkOutVisit = /* GraphQL */ `
+  mutation CheckOutVisit($token: String!) {
+    checkOutVisit(token: $token) {
+      id visitorName status checkOutAt
     }
   }
 `;

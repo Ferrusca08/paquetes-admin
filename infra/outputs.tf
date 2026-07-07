@@ -77,18 +77,24 @@ output "appsync_api_arn" {
   value       = module.appsync.api_arn
 }
 
+output "appsync_public_api_key" {
+  description = "Public AppSync API key for the visitor badge page (getVisitBadge)"
+  value       = module.appsync.api_key
+  sensitive   = true
+}
+
 # -----------------------------------------------------------------------------
 # Convenience: Mobile app configuration
 # -----------------------------------------------------------------------------
 output "mobile_config" {
   description = "Configuration values for the Expo mobile app (Amplify)"
   value = {
-    aws_region           = var.aws_region
-    cognito_user_pool_id = module.cognito.user_pool_id
+    aws_region            = var.aws_region
+    cognito_user_pool_id  = module.cognito.user_pool_id
     cognito_app_client_id = module.cognito.app_client_id
-    appsync_api_url      = module.appsync.api_url
-    appsync_realtime_url = module.appsync.api_realtime_url
-    s3_bucket_name       = module.s3.bucket_name
+    appsync_api_url       = module.appsync.api_url
+    appsync_realtime_url  = module.appsync.api_realtime_url
+    s3_bucket_name        = module.s3.bucket_name
   }
   sensitive = false
 }

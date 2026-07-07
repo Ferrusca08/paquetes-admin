@@ -55,6 +55,14 @@ export default function GuardLayout() {
         }}
       />
       <Tabs.Screen
+        name="visits"
+        options={{
+          title: 'Visitas',
+          tabBarLabel: 'Visitas',
+          tabBarIcon: ({ color }) => <Feather name="user-check" size={20} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="history"
         options={{
           title: 'Historial',

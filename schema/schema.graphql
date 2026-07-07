@@ -148,12 +148,45 @@ type AmenitySlot {
   available: Int!
 }
 
+enum VisitStatus {
+  ACTIVE
+  ENDED
+}
+
+type Visit {
+  id: ID!
+  buildingId: ID!
+  visitorName: String!
+  towerId: ID!
+  towerName: String
+  unitId: ID!
+  unitNumber: String
+  residentId: ID
+  status: VisitStatus!
+  badgeToken: String!
+  checkInAt: AWSDateTime!
+  checkOutAt: AWSDateTime
+  registeredBy: String!
+}
+
+# Public payload for the visitor's virtual badge (no sensitive PII).
+type VisitBadge @aws_api_key @aws_cognito_user_pools {
+  visitorName: String!
+  towerName: String
+  unitNumber: String
+  status: VisitStatus!
+  badgeToken: String!
+}
+
 type OCRResult {
   suggestedName: String
   suggestedTowerName: String
   suggestedUnitNumber: String
   suggestedTrackingNumber: String
   suggestedCarrier: String
+  # Plausible name lines detected on an ID, for the guard to tap when the
+  # auto-detected name is wrong (docType: "id"). Empty for package labels.
+  nameCandidates: [String!]
   rawText: String
   confidence: Float
 }
@@ -208,6 +241,11 @@ type ReservationConnection {
   nextToken: String
 }
 
+type VisitConnection {
+  items: [Visit!]!
+  nextToken: String
+}
+
 type TowerConnection {
   items: [Tower!]!
   nextToken: String
@@ -241,6 +279,8 @@ input ConfirmPickupInput {
 
 input ProcessLabelInput {
   s3Key: String!
+  # "label" (default) for package labels, "id" for visitor ID cards.
+  docType: String
 }
 
 input CreateBuildingInput {
@@ -329,6 +369,14 @@ input CreateReservationInput {
   guests: Int
 }
 
+input CheckInVisitInput {
+  buildingId: ID!
+  visitorName: String!
+  towerId: ID!
+  unitId: ID!
+  residentId: ID
+}
+
 # ============================================================
 # QUERIES
 # ============================================================
@@ -385,6 +433,11 @@ type Query {
   getAmenityAvailability(buildingId: ID!, amenityId: ID!, date: String!): [AmenitySlot!]!
   listMyReservations(residentId: ID!, includePast: Boolean): ReservationConnection!
   listReservations(buildingId: ID!, fromDate: String!, toDate: String!): ReservationConnection!
+
+  # --- Visits ---
+  listActiveVisits(buildingId: ID!): VisitConnection!
+  # Public: resolves the virtual badge by its unguessable token.
+  getVisitBadge(token: String!): VisitBadge @aws_api_key @aws_cognito_user_pools
 }
 
 # ============================================================
@@ -431,6 +484,10 @@ type Mutation {
   # --- Reservations ---
   createReservation(input: CreateReservationInput!): Reservation!
   cancelReservation(buildingId: ID!, reservationId: ID!): ID!
+
+  # --- Visits (Guard) ---
+  checkInVisit(input: CheckInVisitInput!): Visit!
+  checkOutVisit(token: String!): Visit!
 
   # --- Notifications ---
   registerPushToken(residentId: ID!, buildingId: ID!, pushToken: String!): Boolean!

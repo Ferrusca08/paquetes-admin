@@ -8,15 +8,15 @@
 locals {
   functions_dir = "${path.module}/../../../functions/dist"
   runtime       = "nodejs20.x"
-  architecture  = "arm64"   # Graviton — better price/performance
+  architecture  = "arm64" # Graviton — better price/performance
   timeout       = 15
   memory        = 256
 
   # Common environment variables for all Lambda functions
   common_env = merge(
     {
-      TABLE_NAME  = var.dynamodb_table_name
-      BUCKET_NAME = var.s3_bucket_name
+      TABLE_NAME                          = var.dynamodb_table_name
+      BUCKET_NAME                         = var.s3_bucket_name
       AWS_NODEJS_CONNECTION_REUSE_ENABLED = "1"
     },
     var.notification_topic_arn != "" ? { NOTIFICATION_TOPIC_ARN = var.notification_topic_arn } : {},
@@ -45,6 +45,9 @@ locals {
     }
     amenities-resolver = {
       description = "Multi-resolver for amenities and reservations"
+    }
+    visitors-resolver = {
+      description = "Multi-resolver for visitor check-in/out and the virtual badge"
     }
   }
 }
@@ -130,6 +133,7 @@ resource "aws_iam_role_policy" "s3" {
         Action = [
           "s3:PutObject",
           "s3:GetObject",
+          "s3:DeleteObject",
         ]
         Resource = "${var.s3_bucket_arn}/*"
       }
