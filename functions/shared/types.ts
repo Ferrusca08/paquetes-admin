@@ -43,6 +43,7 @@ export interface PackageItem {
   pickupCode: string;
   ocrRawData?: string;
   registeredBy: string;
+  receivedByName?: string;
   deliveredBy?: string;
   deliveredAt?: string;
   notifiedAt?: string;
@@ -222,6 +223,7 @@ export interface RegisterPackageInput {
   carrier?: string;
   trackingNumber?: string;
   labelPhotoKey?: string;
+  receivedByName?: string;
 }
 
 export interface ConfirmPickupInput {

@@ -9,7 +9,7 @@ const PACKAGE_FIELDS = /* GraphQL */ `
   residentName towerName unitNumber
   status carrier trackingNumber
   labelPhotoKey evidencePhotoKey
-  pickupCode registeredBy deliveredBy deliveredAt
+  pickupCode registeredBy receivedByName deliveredBy deliveredAt
   notifiedAt createdAt updatedAt expiresAt
 `;
 
@@ -20,7 +20,7 @@ const GUARD_PACKAGE_FIELDS = /* GraphQL */ `
   residentName towerName unitNumber
   status carrier trackingNumber
   labelPhotoKey evidencePhotoKey
-  registeredBy deliveredBy deliveredAt
+  registeredBy receivedByName deliveredBy deliveredAt
   notifiedAt createdAt updatedAt expiresAt
 `;
 

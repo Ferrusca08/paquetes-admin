@@ -85,6 +85,7 @@ type Package {
   pickupCode: String!
   ocrRawData: AWSJSON
   registeredBy: String!
+  receivedByName: String
   deliveredBy: String
   deliveredAt: AWSDateTime
   notifiedAt: AWSDateTime
@@ -268,6 +269,8 @@ input RegisterPackageInput {
   carrier: String
   trackingNumber: String
   labelPhotoKey: String
+  # Name of the guard who received the package (manual, remembered client-side).
+  receivedByName: String
 }
 
 input ConfirmPickupInput {

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Image,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import { Feather } from '@expo/vector-icons';
 import { generateClient } from 'aws-amplify/api';
@@ -82,6 +83,9 @@ function towerSim(ocr?: string, known?: string): number {
 
 const TOWER_MATCH_THRESHOLD = 0.6;
 
+// AsyncStorage key: last receiving-guard name (remembered across registrations).
+const RECEIVED_BY_KEY = 'pt_lastReceivedBy';
+
 export default function RegisterPackageScreen() {
   const { user } = useAuth();
 
@@ -101,8 +105,18 @@ export default function RegisterPackageScreen() {
   const [carrier, setCarrier] = useState('');
   const [trackingNumber, setTrackingNumber] = useState('');
 
+  // Receiving guard — remembered across registrations to speed up entry.
+  const [receivedByName, setReceivedByName] = useState('');
+
   // Submission
   const [submitting, setSubmitting] = useState(false);
+
+  // Prefill the receiving-guard name with whoever registered last.
+  useEffect(() => {
+    AsyncStorage.getItem(RECEIVED_BY_KEY).then((v) => {
+      if (v) setReceivedByName(v);
+    });
+  }, []);
 
   // ─── Resident search ──────────────────────────────────────
 
@@ -294,15 +308,11 @@ export default function RegisterPackageScreen() {
           'No se pudo identificar con certeza. Elige el correcto de la lista de abajo.',
         );
       } else if (result === 'none') {
-        if (ocr.suggestedName) {
-          setQuery(ocr.suggestedName);
-          await runSearch(ocr.suggestedName, true);
-        } else {
-          Alert.alert(
-            'No se detectó al residente',
-            'No se pudo leer los datos del destinatario. Búscalo manualmente abajo.',
-          );
-        }
+        // Don't force anything — leave the fields empty for the guard to fill.
+        Alert.alert(
+          'Campos no detectados',
+          'No se encontraron los campos necesarios en el paquete, favor de llenar los campos.',
+        );
       }
     } catch {
       Alert.alert('OCR falló', 'No se pudo procesar la etiqueta. Toma la foto de nuevo o busca al residente manualmente.');
@@ -326,6 +336,10 @@ export default function RegisterPackageScreen() {
 
     setSubmitting(true);
     try {
+      const receivedBy = receivedByName.trim();
+      // Remember the receiving guard for next time.
+      if (receivedBy) AsyncStorage.setItem(RECEIVED_BY_KEY, receivedBy);
+
       const result = await client.graphql({
         query: registerPackage,
         variables: {
@@ -337,6 +351,7 @@ export default function RegisterPackageScreen() {
             carrier: carrier || undefined,
             trackingNumber: trackingNumber || undefined,
             labelPhotoKey: photoKey || undefined,
+            receivedByName: receivedBy || undefined,
           },
         },
       });
@@ -469,6 +484,20 @@ export default function RegisterPackageScreen() {
         autoCapitalize="characters"
       />
 
+      {/* STEP 4 — Receiving guard (remembered across registrations) */}
+      <SectionHeader number="4" title="Guardia que recibe" />
+      <TextInput
+        style={styles.input}
+        value={receivedByName}
+        onChangeText={setReceivedByName}
+        placeholder="Nombre del guardia que recibe"
+        placeholderTextColor={colors.gray400}
+        autoCapitalize="words"
+      />
+      <Text style={styles.helperText}>
+        Se recuerda del último registro. Edítalo si es otra persona.
+      </Text>
+
       {/* Submit */}
       <TouchableOpacity
         style={[styles.primaryButton, (!photoKey || !selectedResident || submitting) && styles.disabled]}
@@ -507,6 +536,7 @@ const styles = StyleSheet.create({
   sectionNumberText: { color: colors.white, fontSize: fontSize.xs, fontWeight: '700' },
   sectionTitle: { fontSize: fontSize.md, fontWeight: '600', color: colors.gray800 },
   label: { fontSize: fontSize.sm, fontWeight: '600', color: colors.gray700, marginBottom: 6, marginTop: spacing.sm },
+  helperText: { fontSize: fontSize.xs, color: colors.gray400, marginTop: 6 },
   input: {
     backgroundColor: colors.white,
     borderWidth: 1, borderColor: colors.gray200,

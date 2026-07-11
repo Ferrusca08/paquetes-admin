@@ -44,6 +44,7 @@ function toGraphQL(item: PackageItem) {
     pickupCode: item.pickupCode,
     ocrRawData: item.ocrRawData,
     registeredBy: item.registeredBy,
+    receivedByName: item.receivedByName,
     deliveredBy: item.deliveredBy,
     deliveredAt: item.deliveredAt,
     notifiedAt: item.notifiedAt,
