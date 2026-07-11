@@ -298,7 +298,7 @@ const Q = {
   listUnits: `query($b:ID!){ listUnits(buildingId:$b,limit:500){ items{ id number towerId towerName } } }`,
   listResidents: `query($b:ID!){ listResidents(buildingId:$b,limit:500){ items{ id fullName phone email towerName unitNumber towerId unitId createdAt } } }`,
   listGuards: `query($b:ID!){ listGuards(buildingId:$b){ items{ id fullName email phone status createdAt } } }`,
-  listPackages: `query($b:ID!,$s:PackageStatus!){ listPackagesByStatus(buildingId:$b,status:$s,limit:200){ items{ id residentName towerName unitNumber carrier trackingNumber pickupCode status createdAt deliveredAt } } }`,
+  listPackages: `query($b:ID!,$s:PackageStatus!){ listPackagesByStatus(buildingId:$b,status:$s,limit:200){ items{ id residentName towerName unitNumber carrier trackingNumber pickupCode status receivedByName createdAt deliveredAt } } }`,
   listAmenities: `query($b:ID!){ listAmenities(buildingId:$b){ items{ id name category capacity slotMinutes openTime closeTime days status } } }`,
   listReservations: `query($b:ID!,$f:String!,$t:String!){ listReservations(buildingId:$b,fromDate:$f,toDate:$t){ items{ id amenityName residentName towerName unitNumber date startTime endTime } } }`,
   listActiveVisits: `query($b:ID!){ listActiveVisits(buildingId:$b){ items{ id visitorName towerName unitNumber checkInAt } } }`,
@@ -444,12 +444,13 @@ async function renderPackages(){
   catch(e){ $("#pkgList").innerHTML=`<div class="empty">Error: ${esc(e.message)}</div>`; return; }
   if(!items.length){ $("#pkgList").innerHTML=emptyHtml("inbox","Sin paquetes en estado "+STATUS_LABEL[pkgStatus]); return; }
   $("#pkgList").innerHTML = `<div class="card"><div class="card-body"><table>
-    <thead><tr><th>Residente</th><th>Ubicación</th><th>Paquetería</th><th>Código</th><th>Estado</th><th>Fecha</th></tr></thead>
+    <thead><tr><th>Residente</th><th>Ubicación</th><th>Paquetería</th><th>Código</th><th>Recibió</th><th>Estado</th><th>Fecha</th></tr></thead>
     <tbody>${items.map(p=>`<tr>
       <td><strong>${esc(p.residentName)}</strong></td>
       <td class="muted">${esc(p.towerName||"")} ${esc(p.unitNumber||"")}</td>
       <td>${esc(p.carrier||"—")}<br/><span class="muted" style="font-size:12px">${esc(p.trackingNumber||"")}</span></td>
       <td><span class="code">${esc(p.pickupCode)}</span></td>
+      <td class="muted">${esc(p.receivedByName||"—")}</td>
       <td>${badge(p.status)}</td>
       <td class="muted">${fmtDate(p.createdAt)}</td>
     </tr>`).join("")}</tbody></table></div></div>`;
