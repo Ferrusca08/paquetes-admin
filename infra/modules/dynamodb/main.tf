@@ -106,7 +106,7 @@ resource "aws_dynamodb_table" "main" {
   # -------------------------------------------------------------------
   # Deletion protection (safety net for prod)
   # -------------------------------------------------------------------
-  deletion_protection_enabled = false  # Set to true for prod via tfvars
+  deletion_protection_enabled = true # Guard the packages table against accidental deletion
 
   tags = {
     Name = "${var.project}-${var.environment}-packages"

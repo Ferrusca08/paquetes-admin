@@ -41,16 +41,13 @@ export default function GuardHistoryScreen() {
     try {
       const results = await Promise.all(
         ALL_STATUSES.map((status) =>
-          client
-            .graphql({
+          (
+            client.graphql({
               query: listPackagesByStatus,
               variables: { buildingId: user.buildingId, status, limit: 100 },
-            })
-            .then(
-              (r) =>
-                (r as { data: { listPackagesByStatus: { items: Package[] } } })
-                  .data.listPackagesByStatus.items,
-            )
+            }) as Promise<{ data: { listPackagesByStatus: { items: Package[] } } }>
+          )
+            .then((r) => r.data.listPackagesByStatus.items)
             .catch(() => [] as Package[]),
         ),
       );

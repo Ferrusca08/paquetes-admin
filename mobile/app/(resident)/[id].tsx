@@ -42,10 +42,14 @@ export default function PackageDetailScreen() {
 
   useEffect(() => {
     if (!id || !buildingId) return;
-    client
-      .graphql({ query: getPackage, variables: { buildingId, packageId: id } })
+    (
+      client.graphql({
+        query: getPackage,
+        variables: { buildingId, packageId: id },
+      }) as Promise<{ data: { getPackage: Package | null } }>
+    )
       .then((result) => {
-        const p = (result as { data: { getPackage: Package | null } }).data.getPackage;
+        const p = result.data.getPackage;
         if (!p) Alert.alert('Error', 'Paquete no encontrado');
         else setPkg(p);
       })
