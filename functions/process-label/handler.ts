@@ -64,6 +64,38 @@ const CARRIERS: CarrierPattern[] = [
     keywords: /\bamazon\b|amzn/i,
     trackingPattern: /\b(TBA\d{12}US?)\b/i,
   },
+  // ── Mexican / LATAM carriers ──────────────────────────────────────────────
+  {
+    name: "Moova",
+    keywords: /\bmoova\b|moova\.io/i,
+    // Moova uses UUID-style tracking (e.g. 31873960-7340-11f1-869f-...).
+    trackingPattern: /\b([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/i,
+  },
+  {
+    name: "Estafeta",
+    keywords: /\bestafeta\b/i,
+    trackingPattern: /\b(\d{10,12})\b/,
+  },
+  {
+    name: "Mercado Envíos",
+    keywords: /\bmercado\s*(env[ií]os|libre)\b|\bmeli\b/i,
+    trackingPattern: /\b(\d{11,14})\b/,
+  },
+  {
+    name: "99 Minutos",
+    keywords: /\b99\s*minutos\b|\b99minutos\b/i,
+    trackingPattern: /\b([A-Z0-9]{8,14})\b/i,
+  },
+  {
+    name: "Correos de México",
+    keywords: /\bcorreos de m[eé]xico\b|\bsepomex\b/i,
+    trackingPattern: /\b([A-Z]{2}\d{9}[A-Z]{2})\b/i,
+  },
+  {
+    name: "Paquetexpress",
+    keywords: /\bpaquete\s*express\b|\bpaquetexpress\b/i,
+    trackingPattern: /\b(\d{10,14})\b/,
+  },
 ];
 
 // ─── Address / Name Extraction ───────────────────────────────────────────────

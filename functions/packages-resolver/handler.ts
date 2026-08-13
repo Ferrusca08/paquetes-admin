@@ -34,6 +34,7 @@ function toGraphQL(item: PackageItem) {
     unitId: item.unitId,
     residentId: item.residentId,
     residentName: item.residentName,
+    recipientName: item.recipientName,
     towerName: item.towerName,
     unitNumber: item.unitNumber,
     status: item.status,

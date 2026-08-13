@@ -17,7 +17,10 @@ import {
   QueryCommand,
   UpdateCommand,
 } from "@aws-sdk/lib-dynamodb";
+import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
 import { docClient } from "../shared/dynamo-client.js";
+
+const sns = new SNSClient({});
 import { TABLE_NAME, PK, SK, GSI2, GSI3, GSI_NAMES } from "../shared/constants.js";
 import type {
   AppSyncResolverEvent,
@@ -154,6 +157,29 @@ async function checkInVisit(event: AppSyncResolverEvent<{ input: CheckInVisitInp
   };
 
   await docClient.send(new PutCommand({ TableName: TABLE_NAME, Item: item }));
+
+  // Notify the unit's resident that a visitor arrived (fire-and-forget).
+  if (item.residentId && process.env.NOTIFICATION_TOPIC_ARN) {
+    try {
+      await sns.send(
+        new PublishCommand({
+          TopicArn: process.env.NOTIFICATION_TOPIC_ARN,
+          Subject: "PackTrack:VISIT_CHECKIN",
+          Message: JSON.stringify({
+            type: "VISIT_CHECKIN",
+            buildingId: item.buildingId,
+            residentId: item.residentId,
+            visitorName: item.visitorName,
+            towerName: item.towerName,
+            unitNumber: item.unitNumber,
+          }),
+        }),
+      );
+    } catch (err) {
+      console.error("[visitors] VISIT_CHECKIN publish failed:", err);
+    }
+  }
+
   return visitOut(item);
 }
 

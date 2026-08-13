@@ -104,6 +104,8 @@ export default function RegisterPackageScreen() {
   // Step 3 — package data
   const [carrier, setCarrier] = useState('');
   const [trackingNumber, setTrackingNumber] = useState('');
+  // Addressee on the label (may differ from the unit's titular resident).
+  const [recipientName, setRecipientName] = useState('');
 
   // Receiving guard — remembered across registrations to speed up entry.
   const [receivedByName, setReceivedByName] = useState('');
@@ -299,6 +301,7 @@ export default function RegisterPackageScreen() {
       // Auto-fill package fields from OCR
       if (ocr.suggestedCarrier) setCarrier(ocr.suggestedCarrier);
       if (ocr.suggestedTrackingNumber) setTrackingNumber(ocr.suggestedTrackingNumber);
+      if (ocr.suggestedName) setRecipientName(ocr.suggestedName);
 
       // Core: match the resident against ALL OCR signals (structured + raw text).
       const result = await resolveResident(ocr);
@@ -352,6 +355,7 @@ export default function RegisterPackageScreen() {
             trackingNumber: trackingNumber || undefined,
             labelPhotoKey: photoKey || undefined,
             receivedByName: receivedBy || undefined,
+            recipientName: recipientName.trim() || undefined,
           },
         },
       });
@@ -379,6 +383,7 @@ export default function RegisterPackageScreen() {
     setOcrResult(null);
     setCarrier('');
     setTrackingNumber('');
+    setRecipientName('');
   };
 
   // ─── Render ───────────────────────────────────────────────
@@ -464,6 +469,19 @@ export default function RegisterPackageScreen() {
 
       {/* STEP 3 — Package data */}
       <SectionHeader number="3" title="Datos del paquete" />
+
+      <Text style={styles.label}>Destinatario (nombre en el paquete)</Text>
+      <TextInput
+        style={styles.input}
+        value={recipientName}
+        onChangeText={setRecipientName}
+        placeholder="Nombre en la etiqueta (si no es el titular)"
+        placeholderTextColor={colors.gray400}
+        autoCapitalize="words"
+      />
+      <Text style={styles.helperText}>
+        Se llena del OCR. Edítalo si el paquete va a otra persona del depto.
+      </Text>
 
       <Text style={styles.label}>Transportista</Text>
       <TextInput

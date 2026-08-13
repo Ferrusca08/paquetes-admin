@@ -80,6 +80,8 @@ export const handler = async (
     unitId: input.unitId,
     residentId: input.residentId,
     residentName: resident.fullName,
+    // Actual addressee on the label; falls back to the titular resident's name.
+    recipientName: input.recipientName?.trim() || resident.fullName,
     towerName: resident.towerName,
     unitNumber: resident.unitNumber,
     status: PackageStatus.RECIBIDO,
@@ -138,6 +140,7 @@ export const handler = async (
     unitId: item.unitId,
     residentId: item.residentId,
     residentName: item.residentName,
+    recipientName: item.recipientName,
     towerName: item.towerName,
     unitNumber: item.unitNumber,
     status: item.status,

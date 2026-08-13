@@ -39,21 +39,100 @@ interface PackageRegisteredEvent {
   createdAt: string;
 }
 
+interface VisitCheckinEvent {
+  type: "VISIT_CHECKIN";
+  buildingId: string;
+  residentId: string;
+  visitorName: string;
+  towerName?: string;
+  unitNumber?: string;
+}
+
+interface PackageReminderEvent {
+  type: "PACKAGE_REMINDER";
+  buildingId: string;
+  residentId: string;
+  towerName?: string;
+  unitNumber?: string;
+  daysWaiting: number;
+}
+
+type NotificationEvent = PackageRegisteredEvent | VisitCheckinEvent | PackageReminderEvent;
+
 export const handler = async (event: SNSEvent): Promise<void> => {
   for (const record of event.Records) {
-    let payload: PackageRegisteredEvent;
+    let payload: NotificationEvent;
     try {
-      payload = JSON.parse(record.Sns.Message) as PackageRegisteredEvent;
+      payload = JSON.parse(record.Sns.Message) as NotificationEvent;
     } catch {
       console.error("[notify] Could not parse SNS message:", record.Sns.Message);
       continue;
     }
 
-    if (payload.type !== "PACKAGE_REGISTERED") continue;
-
-    await processNotification(payload);
+    switch (payload.type) {
+      case "PACKAGE_REGISTERED":
+        await processNotification(payload);
+        break;
+      case "VISIT_CHECKIN":
+        await processVisitCheckin(payload);
+        break;
+      case "PACKAGE_REMINDER":
+        await processReminder(payload);
+        break;
+      default:
+        console.warn("[notify] Unknown message type:", (payload as { type?: string }).type);
+    }
   }
 };
+
+/** Look up a resident's push token by id. */
+async function getResident(buildingId: string, residentId: string): Promise<ResidentItem | undefined> {
+  const result = await docClient.send(
+    new GetCommand({
+      TableName: TABLE_NAME,
+      Key: { PK: PK.building(buildingId), SK: SK.resident(residentId) },
+    }),
+  );
+  return result.Item as ResidentItem | undefined;
+}
+
+function locationOf(towerName?: string, unitNumber?: string): string {
+  return [towerName ? `Torre ${towerName}` : "", unitNumber ? `Depto ${unitNumber}` : ""]
+    .filter(Boolean)
+    .join(", ");
+}
+
+async function processVisitCheckin(v: VisitCheckinEvent): Promise<void> {
+  const resident = await getResident(v.buildingId, v.residentId);
+  if (!resident?.pushToken) {
+    console.log(`[notify] No push token for resident ${v.residentId} — skipping visit push`);
+    return;
+  }
+  await sendExpoPush({
+    token: resident.pushToken,
+    title: "👋 Tienes una visita",
+    body: `${v.visitorName} está en recepción.`,
+    packageId: "",
+    buildingId: v.buildingId,
+  });
+}
+
+async function processReminder(r: PackageReminderEvent): Promise<void> {
+  const resident = await getResident(r.buildingId, r.residentId);
+  if (!resident?.pushToken) {
+    console.log(`[notify] No push token for resident ${r.residentId} — skipping reminder`);
+    return;
+  }
+  const loc = locationOf(r.towerName, r.unitNumber);
+  const days = r.daysWaiting === 1 ? "1 día" : `${r.daysWaiting} días`;
+  await sendExpoPush({
+    token: resident.pushToken,
+    title: "📦 Paquete sin retirar",
+    body: `Tienes un paquete esperando desde hace ${days}${loc ? ` (${loc})` : ""}. Pásalo a recoger.`,
+    packageId: "",
+    buildingId: r.buildingId,
+  });
+}
 
 async function processNotification(pkg: PackageRegisteredEvent): Promise<void> {
   const result = await docClient.send(

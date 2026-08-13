@@ -73,6 +73,8 @@ type Package {
   unitId: ID!
   residentId: ID!
   residentName: String!
+  # Actual addressee on the label (may differ from the unit's titular resident).
+  recipientName: String
   towerName: String
   unitNumber: String
   status: PackageStatus!
@@ -271,6 +273,8 @@ input RegisterPackageInput {
   labelPhotoKey: String
   # Name of the guard who received the package (manual, remembered client-side).
   receivedByName: String
+  # Addressee on the label; defaults to the resident's name when omitted.
+  recipientName: String
 }
 
 input ConfirmPickupInput {

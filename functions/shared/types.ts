@@ -33,6 +33,7 @@ export interface PackageItem {
   unitId: string;
   residentId: string;
   residentName: string;
+  recipientName?: string;
   towerName?: string;
   unitNumber?: string;
   status: PackageStatus;
@@ -224,6 +225,7 @@ export interface RegisterPackageInput {
   trackingNumber?: string;
   labelPhotoKey?: string;
   receivedByName?: string;
+  recipientName?: string;
 }
 
 export interface ConfirmPickupInput {

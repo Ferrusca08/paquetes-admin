@@ -6,7 +6,7 @@
 
 const PACKAGE_FIELDS = /* GraphQL */ `
   id buildingId towerId unitId residentId
-  residentName towerName unitNumber
+  residentName recipientName towerName unitNumber
   status carrier trackingNumber
   labelPhotoKey evidencePhotoKey
   pickupCode registeredBy receivedByName deliveredBy deliveredAt
@@ -17,7 +17,7 @@ const PACKAGE_FIELDS = /* GraphQL */ `
 // ever reach the resident, never the guard's browseable lists.
 const GUARD_PACKAGE_FIELDS = /* GraphQL */ `
   id buildingId towerId unitId residentId
-  residentName towerName unitNumber
+  residentName recipientName towerName unitNumber
   status carrier trackingNumber
   labelPhotoKey evidencePhotoKey
   registeredBy receivedByName deliveredBy deliveredAt

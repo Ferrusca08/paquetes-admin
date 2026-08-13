@@ -49,6 +49,9 @@ locals {
     visitors-resolver = {
       description = "Multi-resolver for visitor check-in/out and the virtual badge"
     }
+    reminder-handler = {
+      description = "Daily EventBridge job that reminds residents of un-picked-up packages"
+    }
   }
 }
 

@@ -148,6 +148,30 @@ resource "aws_sns_topic" "package_events" {
 }
 
 # -----------------------------------------------------------------------------
+# EventBridge — daily reminder for un-picked-up packages
+# Invokes the reminder-handler Lambda once a day.
+# -----------------------------------------------------------------------------
+resource "aws_cloudwatch_event_rule" "daily_reminder" {
+  name                = "${var.project}-${var.environment}-daily-reminder"
+  description         = "Daily nudge for packages still waiting to be picked up"
+  schedule_expression = "cron(0 17 * * ? *)" # 17:00 UTC ≈ 11:00 America/Mexico_City
+}
+
+resource "aws_cloudwatch_event_target" "reminder_target" {
+  rule      = aws_cloudwatch_event_rule.daily_reminder.name
+  target_id = "reminder-handler"
+  arn       = module.lambda.function_arns["reminder-handler"]
+}
+
+resource "aws_lambda_permission" "allow_eventbridge_reminder" {
+  statement_id  = "AllowEventBridgeInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = module.lambda.function_names["reminder-handler"]
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.daily_reminder.arn
+}
+
+# -----------------------------------------------------------------------------
 # Module: Notifications (send-notification Lambda + SNS subscription)
 # -----------------------------------------------------------------------------
 module "notifications" {
