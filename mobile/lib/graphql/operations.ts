@@ -161,6 +161,46 @@ export const checkOutVisit = /* GraphQL */ `
   }
 `;
 
+// ─── Community (resident) ─────────────────────────────────────
+
+export const listAnnouncements = /* GraphQL */ `
+  query ListAnnouncements($buildingId: ID!) {
+    listAnnouncements(buildingId: $buildingId) {
+      items { id title body createdAt }
+    }
+  }
+`;
+
+export const listDocuments = /* GraphQL */ `
+  query ListDocuments($buildingId: ID!) {
+    listDocuments(buildingId: $buildingId) {
+      items { id title createdAt }
+    }
+  }
+`;
+
+export const getDocumentUrl = /* GraphQL */ `
+  query GetDocumentUrl($buildingId: ID!, $documentId: ID!) {
+    getDocumentUrl(buildingId: $buildingId, documentId: $documentId)
+  }
+`;
+
+export const listMyReports = /* GraphQL */ `
+  query ListMyReports($residentId: ID!) {
+    listMyReports(residentId: $residentId) {
+      items { id category description status createdAt resolvedAt }
+    }
+  }
+`;
+
+export const createReport = /* GraphQL */ `
+  mutation CreateReport($input: CreateReportInput!) {
+    createReport(input: $input) {
+      id category description status createdAt
+    }
+  }
+`;
+
 // ─── Amenities (resident) ─────────────────────────────────────
 
 export const listAmenities = /* GraphQL */ `

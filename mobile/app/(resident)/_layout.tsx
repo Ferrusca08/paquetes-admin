@@ -46,6 +46,14 @@ export default function ResidentLayout() {
         }}
       />
       <Tabs.Screen
+        name="community"
+        options={{
+          title: 'Comunidad',
+          tabBarLabel: 'Comunidad',
+          tabBarIcon: ({ color }) => <Feather name="message-square" size={20} color={color} />,
+        }}
+      />
+      <Tabs.Screen
         name="history"
         options={{
           title: 'Historial',

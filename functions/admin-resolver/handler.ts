@@ -26,14 +26,20 @@ import {
   ListUsersInGroupCommand,
   AdminDeleteUserCommand,
 } from "@aws-sdk/client-cognito-identity-provider";
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
 import { docClient } from "../shared/dynamo-client.js";
-import { TABLE_NAME, PK, SK, GSI1 } from "../shared/constants.js";
+import { TABLE_NAME, BUCKET_NAME, PK, SK, GSI1, GSI_NAMES } from "../shared/constants.js";
 import type {
   AppSyncResolverEvent,
   BuildingItem,
   TowerItem,
   UnitItem,
   ResidentItem,
+  AnnouncementItem,
+  ReportItem,
+  DocumentItem,
   CreateBuildingInput,
   UpdateBuildingInput,
   CreateTowerInput,
@@ -41,8 +47,12 @@ import type {
   CreateResidentInput,
   UpdateResidentInput,
 } from "../shared/types.js";
-import { NotFoundError } from "../shared/errors.js";
+import { ReportStatus } from "../shared/types.js";
+import { NotFoundError, ValidationError } from "../shared/errors.js";
 import { generateId, now, normalizeName } from "../shared/utils.js";
+
+const s3 = new S3Client({});
+const sns = new SNSClient({});
 
 // ─── Cognito (user provisioning) ────────────────────────────────────────────
 const REGION = process.env.AWS_REGION || "us-east-1";
@@ -68,6 +78,12 @@ const ADMIN_ONLY = new Set([
   "createGuard",
   "listGuards",
   "deleteGuard",
+  "createAnnouncement",
+  "deleteAnnouncement",
+  "listReports",
+  "setReportStatus",
+  "createDocument",
+  "deleteDocument",
 ]);
 
 function callerGroups(event: AppSyncResolverEvent): string[] {
@@ -196,6 +212,52 @@ export const handler = async (event: AppSyncResolverEvent) => {
       return listGuards(event as AppSyncResolverEvent<{ buildingId: string }>);
     case "deleteGuard":
       return deleteGuard(event as AppSyncResolverEvent<{ username: string }>);
+
+    // ─── Community: announcements ────────────────────────────────────
+    case "listAnnouncements":
+      return listAnnouncements(event as AppSyncResolverEvent<{ buildingId: string }>);
+    case "createAnnouncement":
+      return createAnnouncement(
+        event as AppSyncResolverEvent<{ input: { buildingId: string; title: string; body: string } }>,
+      );
+    case "deleteAnnouncement":
+      return deleteAnnouncement(
+        event as AppSyncResolverEvent<{ buildingId: string; announcementId: string }>,
+      );
+
+    // ─── Community: reports / incidencias ────────────────────────────
+    case "createReport":
+      return createReport(
+        event as AppSyncResolverEvent<{
+          input: { buildingId: string; residentId: string; category: string; description: string };
+        }>,
+      );
+    case "listReports":
+      return listReports(event as AppSyncResolverEvent<{ buildingId: string }>);
+    case "listMyReports":
+      return listMyReports(event as AppSyncResolverEvent<{ residentId: string }>);
+    case "setReportStatus":
+      return setReportStatus(
+        event as AppSyncResolverEvent<{ buildingId: string; reportId: string; status: ReportStatus }>,
+      );
+
+    // ─── Community: documents ────────────────────────────────────────
+    case "listDocuments":
+      return listDocuments(event as AppSyncResolverEvent<{ buildingId: string }>);
+    case "getDocumentUrl":
+      return getDocumentUrl(
+        event as AppSyncResolverEvent<{ buildingId: string; documentId: string }>,
+      );
+    case "createDocument":
+      return createDocument(
+        event as AppSyncResolverEvent<{
+          input: { buildingId: string; title: string; fileExtension: string };
+        }>,
+      );
+    case "deleteDocument":
+      return deleteDocument(
+        event as AppSyncResolverEvent<{ buildingId: string; documentId: string }>,
+      );
 
     default:
       throw new Error(`Unknown field: ${field}`);
@@ -797,4 +859,308 @@ function residentToGraphQL(r: ResidentItem) {
     unitNumber: r.unitNumber,
     createdAt: r.createdAt,
   };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// COMMUNITY: ANNOUNCEMENTS
+// ═══════════════════════════════════════════════════════════════════════════
+
+function announcementOut(a: AnnouncementItem) {
+  return {
+    id: a.id,
+    buildingId: a.buildingId,
+    title: a.title,
+    body: a.body,
+    createdBy: a.createdBy,
+    createdAt: a.createdAt,
+  };
+}
+
+async function listAnnouncements(event: AppSyncResolverEvent<{ buildingId: string }>) {
+  const { buildingId } = event.arguments;
+  const r = await docClient.send(
+    new QueryCommand({
+      TableName: TABLE_NAME,
+      KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+      ExpressionAttributeValues: { ":pk": PK.building(buildingId), ":sk": "ANNC#" },
+    }),
+  );
+  const items = (r.Items as AnnouncementItem[]).map(announcementOut);
+  items.sort((a, b) => b.createdAt.localeCompare(a.createdAt)); // newest first
+  return { items, nextToken: null };
+}
+
+async function createAnnouncement(
+  event: AppSyncResolverEvent<{ input: { buildingId: string; title: string; body: string } }>,
+) {
+  const { input } = event.arguments;
+  if (!input.title?.trim()) throw new ValidationError("title is required");
+  if (!input.body?.trim()) throw new ValidationError("body is required");
+
+  const id = generateId();
+  const ts = now();
+  const item: AnnouncementItem = {
+    PK: PK.building(input.buildingId),
+    SK: SK.announcement(id),
+    entityType: "ANNOUNCEMENT",
+    id,
+    buildingId: input.buildingId,
+    title: input.title.trim(),
+    body: input.body.trim(),
+    createdBy: event.identity?.sub ?? "admin",
+    createdAt: ts,
+  };
+  await docClient.send(new PutCommand({ TableName: TABLE_NAME, Item: item }));
+
+  // Fan-out push to all residents of the building (fire-and-forget).
+  if (process.env.NOTIFICATION_TOPIC_ARN) {
+    try {
+      await sns.send(
+        new PublishCommand({
+          TopicArn: process.env.NOTIFICATION_TOPIC_ARN,
+          Subject: "PackTrack:ANNOUNCEMENT",
+          Message: JSON.stringify({
+            type: "ANNOUNCEMENT",
+            buildingId: input.buildingId,
+            title: item.title,
+            body: item.body,
+          }),
+        }),
+      );
+    } catch (err) {
+      console.error("[admin] ANNOUNCEMENT publish failed:", err);
+    }
+  }
+  return announcementOut(item);
+}
+
+async function deleteAnnouncement(
+  event: AppSyncResolverEvent<{ buildingId: string; announcementId: string }>,
+) {
+  const { buildingId, announcementId } = event.arguments;
+  await docClient.send(
+    new DeleteCommand({
+      TableName: TABLE_NAME,
+      Key: { PK: PK.building(buildingId), SK: SK.announcement(announcementId) },
+    }),
+  );
+  return announcementId;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// COMMUNITY: REPORTS / INCIDENCIAS
+// ═══════════════════════════════════════════════════════════════════════════
+
+function reportOut(r: ReportItem) {
+  return {
+    id: r.id,
+    buildingId: r.buildingId,
+    residentId: r.residentId,
+    residentName: r.residentName ?? null,
+    towerName: r.towerName ?? null,
+    unitNumber: r.unitNumber ?? null,
+    category: r.category,
+    description: r.description,
+    status: r.status,
+    createdAt: r.createdAt,
+    resolvedAt: r.resolvedAt ?? null,
+  };
+}
+
+async function createReport(
+  event: AppSyncResolverEvent<{
+    input: { buildingId: string; residentId: string; category: string; description: string };
+  }>,
+) {
+  const { input } = event.arguments;
+  if (!input.description?.trim()) throw new ValidationError("description is required");
+
+  // Denormalize the resident's name/location for the admin list.
+  const res = await docClient.send(
+    new GetCommand({
+      TableName: TABLE_NAME,
+      Key: { PK: PK.building(input.buildingId), SK: SK.resident(input.residentId) },
+    }),
+  );
+  const resident = res.Item as ResidentItem | undefined;
+
+  const id = generateId();
+  const ts = now();
+  const item: ReportItem = {
+    PK: PK.building(input.buildingId),
+    SK: SK.report(id),
+    ...GSI1.reportByResident(input.residentId, ts),
+    entityType: "REPORT",
+    id,
+    buildingId: input.buildingId,
+    residentId: input.residentId,
+    residentName: resident?.fullName,
+    towerName: resident?.towerName,
+    unitNumber: resident?.unitNumber,
+    category: input.category?.trim() || "General",
+    description: input.description.trim(),
+    status: ReportStatus.OPEN,
+    createdAt: ts,
+  };
+  await docClient.send(new PutCommand({ TableName: TABLE_NAME, Item: item }));
+  return reportOut(item);
+}
+
+async function listReports(event: AppSyncResolverEvent<{ buildingId: string }>) {
+  const { buildingId } = event.arguments;
+  const r = await docClient.send(
+    new QueryCommand({
+      TableName: TABLE_NAME,
+      KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+      ExpressionAttributeValues: { ":pk": PK.building(buildingId), ":sk": "RPT#" },
+    }),
+  );
+  const items = (r.Items as ReportItem[]).map(reportOut);
+  items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return { items, nextToken: null };
+}
+
+async function listMyReports(event: AppSyncResolverEvent<{ residentId: string }>) {
+  const { residentId } = event.arguments;
+  const r = await docClient.send(
+    new QueryCommand({
+      TableName: TABLE_NAME,
+      IndexName: GSI_NAMES.GSI1,
+      KeyConditionExpression: "gsi1pk = :pk AND begins_with(gsi1sk, :sk)",
+      ExpressionAttributeValues: { ":pk": `RES#${residentId}`, ":sk": "RPT#" },
+      ScanIndexForward: false, // newest first
+    }),
+  );
+  return { items: (r.Items as ReportItem[]).map(reportOut), nextToken: null };
+}
+
+async function setReportStatus(
+  event: AppSyncResolverEvent<{ buildingId: string; reportId: string; status: ReportStatus }>,
+) {
+  const { buildingId, reportId, status } = event.arguments;
+  const r = await docClient.send(
+    new UpdateCommand({
+      TableName: TABLE_NAME,
+      Key: { PK: PK.building(buildingId), SK: SK.report(reportId) },
+      UpdateExpression:
+        status === ReportStatus.RESOLVED
+          ? "SET #s = :s, resolvedAt = :ts"
+          : "SET #s = :s REMOVE resolvedAt",
+      ConditionExpression: "attribute_exists(SK)",
+      ExpressionAttributeNames: { "#s": "status" },
+      ExpressionAttributeValues:
+        status === ReportStatus.RESOLVED ? { ":s": status, ":ts": now() } : { ":s": status },
+      ReturnValues: "ALL_NEW",
+    }),
+  );
+  return reportOut(r.Attributes as ReportItem);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// COMMUNITY: DOCUMENTS
+// ═══════════════════════════════════════════════════════════════════════════
+
+const ALLOWED_DOC_EXT = new Set(["pdf", "jpg", "jpeg", "png", "doc", "docx"]);
+
+function documentOut(d: DocumentItem) {
+  return {
+    id: d.id,
+    buildingId: d.buildingId,
+    title: d.title,
+    s3Key: d.s3Key,
+    createdBy: d.createdBy,
+    createdAt: d.createdAt,
+  };
+}
+
+async function listDocuments(event: AppSyncResolverEvent<{ buildingId: string }>) {
+  const { buildingId } = event.arguments;
+  const r = await docClient.send(
+    new QueryCommand({
+      TableName: TABLE_NAME,
+      KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+      ExpressionAttributeValues: { ":pk": PK.building(buildingId), ":sk": "DOC#" },
+    }),
+  );
+  const items = (r.Items as DocumentItem[]).map(documentOut);
+  items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return { items, nextToken: null };
+}
+
+async function createDocument(
+  event: AppSyncResolverEvent<{ input: { buildingId: string; title: string; fileExtension: string } }>,
+) {
+  const { input } = event.arguments;
+  if (!input.title?.trim()) throw new ValidationError("title is required");
+  const ext = input.fileExtension.toLowerCase().replace(".", "");
+  if (!ALLOWED_DOC_EXT.has(ext)) {
+    throw new ValidationError(`Invalid file type: ${ext}. Allowed: ${[...ALLOWED_DOC_EXT].join(", ")}`);
+  }
+
+  const id = generateId();
+  const s3Key = `document/${input.buildingId}/${id}.${ext}`;
+  const item: DocumentItem = {
+    PK: PK.building(input.buildingId),
+    SK: SK.document(id),
+    entityType: "DOCUMENT",
+    id,
+    buildingId: input.buildingId,
+    title: input.title.trim(),
+    s3Key,
+    createdBy: event.identity?.sub ?? "admin",
+    createdAt: now(),
+  };
+  await docClient.send(new PutCommand({ TableName: TABLE_NAME, Item: item }));
+
+  const uploadUrl = await getSignedUrl(
+    s3,
+    new PutObjectCommand({ Bucket: BUCKET_NAME, Key: s3Key }),
+    { expiresIn: 300 },
+  );
+  return { document: documentOut(item), uploadUrl };
+}
+
+async function getDocumentUrl(
+  event: AppSyncResolverEvent<{ buildingId: string; documentId: string }>,
+) {
+  const { buildingId, documentId } = event.arguments;
+  const r = await docClient.send(
+    new GetCommand({
+      TableName: TABLE_NAME,
+      Key: { PK: PK.building(buildingId), SK: SK.document(documentId) },
+    }),
+  );
+  const doc = r.Item as DocumentItem | undefined;
+  if (!doc) throw new NotFoundError("Document", documentId);
+  return getSignedUrl(s3, new GetObjectCommand({ Bucket: BUCKET_NAME, Key: doc.s3Key }), {
+    expiresIn: 300,
+  });
+}
+
+async function deleteDocument(
+  event: AppSyncResolverEvent<{ buildingId: string; documentId: string }>,
+) {
+  const { buildingId, documentId } = event.arguments;
+  const r = await docClient.send(
+    new GetCommand({
+      TableName: TABLE_NAME,
+      Key: { PK: PK.building(buildingId), SK: SK.document(documentId) },
+    }),
+  );
+  const doc = r.Item as DocumentItem | undefined;
+  if (doc) {
+    // Best-effort remove the S3 object, then the metadata row.
+    try {
+      await s3.send(new DeleteObjectCommand({ Bucket: BUCKET_NAME, Key: doc.s3Key }));
+    } catch (err) {
+      console.error("[admin] deleteDocument S3 delete failed:", err);
+    }
+  }
+  await docClient.send(
+    new DeleteCommand({
+      TableName: TABLE_NAME,
+      Key: { PK: PK.building(buildingId), SK: SK.document(documentId) },
+    }),
+  );
+  return documentId;
 }

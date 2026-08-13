@@ -181,6 +181,83 @@ type VisitBadge @aws_api_key @aws_cognito_user_pools {
   badgeToken: String!
 }
 
+type Announcement {
+  id: ID!
+  buildingId: ID!
+  title: String!
+  body: String!
+  createdBy: String!
+  createdAt: AWSDateTime!
+}
+
+enum ReportStatus {
+  OPEN
+  RESOLVED
+}
+
+type Report {
+  id: ID!
+  buildingId: ID!
+  residentId: ID!
+  residentName: String
+  towerName: String
+  unitNumber: String
+  category: String!
+  description: String!
+  status: ReportStatus!
+  createdAt: AWSDateTime!
+  resolvedAt: AWSDateTime
+}
+
+type Document {
+  id: ID!
+  buildingId: ID!
+  title: String!
+  s3Key: String!
+  createdBy: String!
+  createdAt: AWSDateTime!
+}
+
+# createDocument returns the doc plus a presigned PUT URL to upload the file.
+type DocumentUpload {
+  document: Document!
+  uploadUrl: String!
+}
+
+type AnnouncementConnection {
+  items: [Announcement!]!
+  nextToken: String
+}
+
+type ReportConnection {
+  items: [Report!]!
+  nextToken: String
+}
+
+type DocumentConnection {
+  items: [Document!]!
+  nextToken: String
+}
+
+input CreateAnnouncementInput {
+  buildingId: ID!
+  title: String!
+  body: String!
+}
+
+input CreateReportInput {
+  buildingId: ID!
+  residentId: ID!
+  category: String!
+  description: String!
+}
+
+input CreateDocumentInput {
+  buildingId: ID!
+  title: String!
+  fileExtension: String!
+}
+
 type OCRResult {
   suggestedName: String
   suggestedTowerName: String
@@ -445,6 +522,13 @@ type Query {
   listActiveVisits(buildingId: ID!): VisitConnection!
   # Public: resolves the virtual badge by its unguessable token.
   getVisitBadge(token: String!): VisitBadge @aws_api_key @aws_cognito_user_pools
+
+  # --- Community ---
+  listAnnouncements(buildingId: ID!): AnnouncementConnection!
+  listReports(buildingId: ID!): ReportConnection!
+  listMyReports(residentId: ID!): ReportConnection!
+  listDocuments(buildingId: ID!): DocumentConnection!
+  getDocumentUrl(buildingId: ID!, documentId: ID!): String!
 }
 
 # ============================================================
@@ -495,6 +579,16 @@ type Mutation {
   # --- Visits (Guard) ---
   checkInVisit(input: CheckInVisitInput!): Visit!
   checkOutVisit(token: String!): Visit!
+
+  # --- Community ---
+  createAnnouncement(input: CreateAnnouncementInput!): Announcement!
+  deleteAnnouncement(buildingId: ID!, announcementId: ID!): ID!
+
+  createReport(input: CreateReportInput!): Report!
+  setReportStatus(buildingId: ID!, reportId: ID!, status: ReportStatus!): Report!
+
+  createDocument(input: CreateDocumentInput!): DocumentUpload!
+  deleteDocument(buildingId: ID!, documentId: ID!): ID!
 
   # --- Notifications ---
   registerPushToken(residentId: ID!, buildingId: ID!, pushToken: String!): Boolean!

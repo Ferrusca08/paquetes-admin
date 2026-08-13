@@ -186,6 +186,18 @@ locals {
     "Query-listGuards"     = { type = "Query", field = "listGuards" }
     "Mutation-createGuard" = { type = "Mutation", field = "createGuard" }
     "Mutation-deleteGuard" = { type = "Mutation", field = "deleteGuard" }
+    # Community: announcements / reports / documents
+    "Query-listAnnouncements"    = { type = "Query", field = "listAnnouncements" }
+    "Query-listReports"          = { type = "Query", field = "listReports" }
+    "Query-listMyReports"        = { type = "Query", field = "listMyReports" }
+    "Query-listDocuments"        = { type = "Query", field = "listDocuments" }
+    "Query-getDocumentUrl"       = { type = "Query", field = "getDocumentUrl" }
+    "Mutation-createAnnouncement" = { type = "Mutation", field = "createAnnouncement" }
+    "Mutation-deleteAnnouncement" = { type = "Mutation", field = "deleteAnnouncement" }
+    "Mutation-createReport"       = { type = "Mutation", field = "createReport" }
+    "Mutation-setReportStatus"    = { type = "Mutation", field = "setReportStatus" }
+    "Mutation-createDocument"     = { type = "Mutation", field = "createDocument" }
+    "Mutation-deleteDocument"     = { type = "Mutation", field = "deleteDocument" }
   }
 }
 

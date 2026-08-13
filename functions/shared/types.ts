@@ -321,3 +321,53 @@ export interface CheckInVisitInput {
   unitId: string;
   residentId?: string;
 }
+
+// ─── Community: announcements, reports, documents ────────────────────────────
+
+export interface AnnouncementItem {
+  PK: string;
+  SK: string;
+  entityType: "ANNOUNCEMENT";
+  id: string;
+  buildingId: string;
+  title: string;
+  body: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+export enum ReportStatus {
+  OPEN = "OPEN",
+  RESOLVED = "RESOLVED",
+}
+
+export interface ReportItem {
+  PK: string;
+  SK: string;
+  gsi1pk?: string;
+  gsi1sk?: string;
+  entityType: "REPORT";
+  id: string;
+  buildingId: string;
+  residentId: string;
+  residentName?: string;
+  towerName?: string;
+  unitNumber?: string;
+  category: string;
+  description: string;
+  status: ReportStatus;
+  createdAt: string;
+  resolvedAt?: string;
+}
+
+export interface DocumentItem {
+  PK: string;
+  SK: string;
+  entityType: "DOCUMENT";
+  id: string;
+  buildingId: string;
+  title: string;
+  s3Key: string;
+  createdBy: string;
+  createdAt: string;
+}

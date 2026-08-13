@@ -6,7 +6,7 @@
  * 2. Sends Expo push notification (if pushToken is registered)
  * 3. Sends an SMS via Amazon SNS (if the resident has a phone)
  */
-import { GetCommand } from "@aws-sdk/lib-dynamodb";
+import { GetCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import { SNSClient, PublishCommand } from "@aws-sdk/client-sns";
 import { docClient } from "../shared/dynamo-client.js";
 import { TABLE_NAME, PK, SK } from "../shared/constants.js";
@@ -57,7 +57,18 @@ interface PackageReminderEvent {
   daysWaiting: number;
 }
 
-type NotificationEvent = PackageRegisteredEvent | VisitCheckinEvent | PackageReminderEvent;
+interface AnnouncementEvent {
+  type: "ANNOUNCEMENT";
+  buildingId: string;
+  title: string;
+  body: string;
+}
+
+type NotificationEvent =
+  | PackageRegisteredEvent
+  | VisitCheckinEvent
+  | PackageReminderEvent
+  | AnnouncementEvent;
 
 export const handler = async (event: SNSEvent): Promise<void> => {
   for (const record of event.Records) {
@@ -78,6 +89,9 @@ export const handler = async (event: SNSEvent): Promise<void> => {
         break;
       case "PACKAGE_REMINDER":
         await processReminder(payload);
+        break;
+      case "ANNOUNCEMENT":
+        await processAnnouncement(payload);
         break;
       default:
         console.warn("[notify] Unknown message type:", (payload as { type?: string }).type);
@@ -115,6 +129,35 @@ async function processVisitCheckin(v: VisitCheckinEvent): Promise<void> {
     packageId: "",
     buildingId: v.buildingId,
   });
+}
+
+async function processAnnouncement(a: AnnouncementEvent): Promise<void> {
+  // Push to every resident of the building that has a registered push token.
+  let lastKey: Record<string, unknown> | undefined;
+  let sent = 0;
+  do {
+    const res = await docClient.send(
+      new QueryCommand({
+        TableName: TABLE_NAME,
+        KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+        ExpressionAttributeValues: { ":pk": PK.building(a.buildingId), ":sk": "RES#" },
+        ExclusiveStartKey: lastKey,
+      }),
+    );
+    for (const item of (res.Items as ResidentItem[]) ?? []) {
+      if (!item.pushToken) continue;
+      await sendExpoPush({
+        token: item.pushToken,
+        title: `📣 ${a.title}`,
+        body: a.body,
+        packageId: "",
+        buildingId: a.buildingId,
+      });
+      sent++;
+    }
+    lastKey = res.LastEvaluatedKey as Record<string, unknown> | undefined;
+  } while (lastKey);
+  console.log(`[notify] announcement pushed to ${sent} resident(s)`);
 }
 
 async function processReminder(r: PackageReminderEvent): Promise<void> {

@@ -25,6 +25,9 @@ export const SK = {
   amenity: (id: string) => `AMEN#${id}`,
   reservation: (id: string) => `RESV#${id}`,
   visit: (id: string) => `VISIT#${id}`,
+  announcement: (id: string) => `ANNC#${id}`,
+  report: (id: string) => `RPT#${id}`,
+  document: (id: string) => `DOC#${id}`,
   /** Slot capacity counter: SLOT#<amenityId>#<date>#<startTime> */
   slot: (amenityId: string, date: string, startTime: string) =>
     `SLOT#${amenityId}#${date}#${startTime}`,
@@ -53,6 +56,11 @@ export const GSI1 = {
   reservationByResident: (residentId: string, date: string, startTime: string) => ({
     gsi1pk: `RES#${residentId}`,
     gsi1sk: `RESV#${date}#${startTime}`,
+  }),
+  /** Resident's reports: gsi1pk = RES#<id>, gsi1sk = RPT#<createdAt> */
+  reportByResident: (residentId: string, createdAt: string) => ({
+    gsi1pk: `RES#${residentId}`,
+    gsi1sk: `RPT#${createdAt}`,
   }),
 } as const;
 
