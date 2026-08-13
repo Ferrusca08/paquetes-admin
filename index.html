@@ -181,6 +181,9 @@
         <div class="nav-item" data-view="guards"><span class="ico"></span> Guardias</div>
         <div class="nav-item" data-view="amenities"><span class="ico"></span> Amenidades</div>
         <div class="nav-item" data-view="visits"><span class="ico"></span> Visitas</div>
+        <div class="nav-item" data-view="announcements"><span class="ico"></span> Avisos</div>
+        <div class="nav-item" data-view="reports"><span class="ico"></span> Incidencias</div>
+        <div class="nav-item" data-view="documents"><span class="ico"></span> Documentos</div>
         <div class="nav-item" data-view="buildings"><span class="ico"></span> Edificios</div>
       </nav>
       <div class="foot">PackTrack Admin · dev<br/>v1.0</div>
@@ -302,6 +305,10 @@ const Q = {
   listAmenities: `query($b:ID!){ listAmenities(buildingId:$b){ items{ id name category capacity slotMinutes openTime closeTime days status } } }`,
   listReservations: `query($b:ID!,$f:String!,$t:String!){ listReservations(buildingId:$b,fromDate:$f,toDate:$t){ items{ id amenityName residentName towerName unitNumber date startTime endTime } } }`,
   listActiveVisits: `query($b:ID!){ listActiveVisits(buildingId:$b){ items{ id visitorName towerName unitNumber checkInAt } } }`,
+  listAnnouncements: `query($b:ID!){ listAnnouncements(buildingId:$b){ items{ id title body createdAt } } }`,
+  listReports: `query($b:ID!){ listReports(buildingId:$b){ items{ id residentName towerName unitNumber category description status createdAt resolvedAt } } }`,
+  listDocuments: `query($b:ID!){ listDocuments(buildingId:$b){ items{ id title createdAt } } }`,
+  getDocumentUrl: `query($b:ID!,$d:ID!){ getDocumentUrl(buildingId:$b,documentId:$d) }`,
 };
 const M = {
   createBuilding: `mutation($i:CreateBuildingInput!){ createBuilding(input:$i){ id } }`,
@@ -319,6 +326,11 @@ const M = {
   setAmenityStatus: `mutation($b:ID!,$a:ID!,$s:AmenityStatus!){ setAmenityStatus(buildingId:$b,amenityId:$a,status:$s){ id status } }`,
   deleteAmenity: `mutation($b:ID!,$a:ID!){ deleteAmenity(buildingId:$b,amenityId:$a) }`,
   cancelReservation: `mutation($b:ID!,$r:ID!){ cancelReservation(buildingId:$b,reservationId:$r) }`,
+  createAnnouncement: `mutation($i:CreateAnnouncementInput!){ createAnnouncement(input:$i){ id } }`,
+  deleteAnnouncement: `mutation($b:ID!,$a:ID!){ deleteAnnouncement(buildingId:$b,announcementId:$a) }`,
+  setReportStatus: `mutation($b:ID!,$r:ID!,$s:ReportStatus!){ setReportStatus(buildingId:$b,reportId:$r,status:$s){ id status } }`,
+  createDocument: `mutation($i:CreateDocumentInput!){ createDocument(input:$i){ document{ id } uploadUrl } }`,
+  deleteDocument: `mutation($b:ID!,$d:ID!){ deleteDocument(buildingId:$b,documentId:$d) }`,
 };
 
 /* ============================================================
@@ -341,7 +353,7 @@ const ICONS = {
   calendar:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
 };
 function icon(name, size){ size=size||18; return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-0.18em">${ICONS[name]||''}</svg>`; }
-const NAV_ICON = { overview:'overview', packages:'package', residents:'users', guards:'shield', amenities:'calendar', visits:'user', buildings:'home' };
+const NAV_ICON = { overview:'overview', packages:'package', residents:'users', guards:'shield', amenities:'calendar', visits:'user', announcements:'inbox', reports:'alert', documents:'upload', buildings:'home' };
 document.querySelectorAll('.nav-item').forEach(n=>{ const ic=n.querySelector('.ico'); if(ic) ic.innerHTML=icon(NAV_ICON[n.dataset.view]||'package',18); });
 
 function fmtDate(d){ if(!d) return "—"; const x=new Date(d); return x.toLocaleDateString("es-MX",{day:"2-digit",month:"short",year:"numeric"}); }
@@ -395,6 +407,9 @@ async function render(){
   if(S.view==="guards") return renderGuards();
   if(S.view==="amenities") return renderAmenities();
   if(S.view==="visits") return renderVisits();
+  if(S.view==="announcements") return renderAnnouncements();
+  if(S.view==="reports") return renderReports();
+  if(S.view==="documents") return renderDocuments();
   if(S.view==="buildings") return renderBuildings();
 }
 
@@ -889,6 +904,108 @@ async function renderVisits(){
 
   $("#content").innerHTML = head + body;
 }
+
+/* ---- AVISOS / ANNOUNCEMENTS ---- */
+async function renderAnnouncements(){
+  if(!S.building){ return emptyState("inbox","Selecciona un edificio"); }
+  setLoading();
+  let items=[];
+  try{ const d=await gql(Q.listAnnouncements,{b:S.building}); items=d.listAnnouncements.items||[]; }
+  catch(e){ $("#content").innerHTML=`<div class="empty">Error: ${esc(e.message)}</div>`; return; }
+  $("#content").innerHTML = `
+    <div class="page-title">Avisos</div>
+    <div class="page-sub">${items.length} aviso(s) · se envía push a los residentes al publicar</div>
+    <div class="card"><div class="card-head"><h3>Comunicados</h3>
+      <button class="btn btn-sm" onclick="announcementForm()">+ Nuevo aviso</button></div>
+      <div class="card-body">${items.length? items.map(a=>`
+        <div style="padding:14px 20px;border-bottom:1px solid var(--border)">
+          <div style="display:flex;justify-content:space-between;gap:10px">
+            <strong>${esc(a.title)}</strong>
+            <button class="btn btn-danger btn-sm" onclick="delAnnouncement('${a.id}','${esc(a.title)}')">Eliminar</button>
+          </div>
+          <div class="muted" style="font-size:12px;margin:4px 0">${fmtDate(a.createdAt)}</div>
+          <div>${esc(a.body)}</div>
+        </div>`).join("") : emptyHtml("inbox","Sin avisos")}</div></div>`;
+}
+function announcementForm(){
+  openModal("Nuevo aviso",
+    `<div class="field"><label>Título</label><input id="an_title" placeholder="Ej. Corte de agua"/></div>
+     <div class="field"><label>Mensaje</label><textarea id="an_body" rows="4" style="width:100%;padding:12px 14px;border:1.5px solid var(--border);border-radius:10px;font-family:inherit"></textarea></div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn" id="an_save">Publicar y notificar</button>`);
+  $("#an_save").onclick=async()=>{
+    const title=$("#an_title").value.trim(), body=$("#an_body").value.trim();
+    if(!title||!body){ toast("Título y mensaje requeridos","err"); return; }
+    try{ await gql(M.createAnnouncement,{i:{buildingId:S.building,title,body}}); closeModal(); toast("Aviso publicado"); renderAnnouncements(); }
+    catch(e){ toast(e.message,"err"); }
+  };
+}
+async function delAnnouncement(id,title){ if(!confirm(`¿Eliminar el aviso "${title}"?`)) return; try{ await gql(M.deleteAnnouncement,{b:S.building,a:id}); toast("Aviso eliminado"); renderAnnouncements(); }catch(e){ toast(e.message,"err"); } }
+
+/* ---- INCIDENCIAS / REPORTS ---- */
+async function renderReports(){
+  if(!S.building){ return emptyState("alert","Selecciona un edificio"); }
+  setLoading();
+  let items=[];
+  try{ const d=await gql(Q.listReports,{b:S.building}); items=d.listReports.items||[]; }
+  catch(e){ $("#content").innerHTML=`<div class="empty">Error: ${esc(e.message)}</div>`; return; }
+  const chip=s=> s==="RESOLVED"?`<span class="badge b-entregado"><span class="dot" style="background:var(--green)"></span>Resuelto</span>`:`<span class="badge b-notificado"><span class="dot" style="background:var(--amber)"></span>Abierto</span>`;
+  $("#content").innerHTML = `
+    <div class="page-title">Incidencias</div>
+    <div class="page-sub">${items.length} reporte(s) de residentes</div>
+    <div class="card"><div class="card-body">${items.length? `<table>
+      <thead><tr><th>Residente</th><th>Ubicación</th><th>Categoría</th><th>Descripción</th><th>Estado</th><th>Fecha</th><th></th></tr></thead>
+      <tbody>${items.map(r=>`<tr>
+        <td><strong>${esc(r.residentName||"—")}</strong></td>
+        <td class="muted">${esc(r.towerName||"")} ${esc(r.unitNumber||"")}</td>
+        <td>${esc(r.category)}</td>
+        <td class="muted">${esc(r.description)}</td>
+        <td>${chip(r.status)}</td>
+        <td class="muted">${fmtDate(r.createdAt)}</td>
+        <td class="row-actions"><button class="btn btn-ghost btn-sm" onclick="toggleReport('${r.id}','${r.status==="RESOLVED"?"OPEN":"RESOLVED"}')">${r.status==="RESOLVED"?"Reabrir":"Resolver"}</button></td>
+      </tr>`).join("")}</tbody></table>` : emptyHtml("alert","Sin incidencias")}</div></div>`;
+}
+async function toggleReport(id,status){ try{ await gql(M.setReportStatus,{b:S.building,r:id,s:status}); toast("Estado actualizado"); renderReports(); }catch(e){ toast(e.message,"err"); } }
+
+/* ---- DOCUMENTOS / DOCUMENTS ---- */
+async function renderDocuments(){
+  if(!S.building){ return emptyState("upload","Selecciona un edificio"); }
+  setLoading();
+  let items=[];
+  try{ const d=await gql(Q.listDocuments,{b:S.building}); items=d.listDocuments.items||[]; }
+  catch(e){ $("#content").innerHTML=`<div class="empty">Error: ${esc(e.message)}</div>`; return; }
+  $("#content").innerHTML = `
+    <div class="page-title">Documentos</div>
+    <div class="page-sub">${items.length} documento(s) · reglamento y archivos del condominio</div>
+    <div class="card"><div class="card-head"><h3>Archivos</h3>
+      <button class="btn btn-sm" onclick="documentForm()">+ Subir documento</button></div>
+      <div class="card-body">${items.length? `<table>
+        <thead><tr><th>Título</th><th>Fecha</th><th></th></tr></thead>
+        <tbody>${items.map(d=>`<tr>
+          <td><strong>${esc(d.title)}</strong></td>
+          <td class="muted">${fmtDate(d.createdAt)}</td>
+          <td class="row-actions">
+            <button class="btn btn-ghost btn-sm" onclick="openDocument('${d.id}')">Ver</button>
+            <button class="btn btn-danger btn-sm" onclick="delDocument('${d.id}','${esc(d.title)}')">Eliminar</button>
+          </td></tr>`).join("")}</tbody></table>` : emptyHtml("upload","Sin documentos")}</div></div>`;
+}
+function documentForm(){
+  openModal("Subir documento",
+    `<div class="field"><label>Título</label><input id="doc_title" placeholder="Ej. Reglamento interno"/></div>
+     <div class="field"><label>Archivo (PDF, imagen, Word)</label><input id="doc_file" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"/></div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancelar</button><button class="btn" id="doc_save">Subir</button>`);
+  $("#doc_save").onclick=async()=>{
+    const title=$("#doc_title").value.trim(), file=$("#doc_file").files[0];
+    if(!title||!file){ toast("Título y archivo requeridos","err"); return; }
+    const ext=(file.name.split(".").pop()||"").toLowerCase();
+    try{
+      const r=await gql(M.createDocument,{i:{buildingId:S.building,title,fileExtension:ext}});
+      await fetch(r.createDocument.uploadUrl,{method:"PUT",body:file});
+      closeModal(); toast("Documento subido"); renderDocuments();
+    }catch(e){ toast(e.message,"err"); }
+  };
+}
+async function openDocument(id){ try{ const r=await gql(Q.getDocumentUrl,{b:S.building,d:id}); window.open(r.getDocumentUrl,"_blank"); }catch(e){ toast(e.message,"err"); } }
+async function delDocument(id,title){ if(!confirm(`¿Eliminar "${title}"?`)) return; try{ await gql(M.deleteDocument,{b:S.building,d:id}); toast("Documento eliminado"); renderDocuments(); }catch(e){ toast(e.message,"err"); } }
 
 /* ---- empty helpers ---- */
 function emptyHtml(ico,msg){ return `<div class="empty"><div class="big" style="color:var(--border)">${icon(ico,40)}</div>${esc(msg)}</div>`; }
