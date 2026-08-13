@@ -11,7 +11,9 @@
 # -----------------------------------------------------------------------------
 resource "aws_iam_role_policy" "sns_publish" {
   name = "${var.project}-${var.environment}-lambda-sns-publish"
-  role = var.lambda_role_arn
+  # aws_iam_role_policy.role wants the role NAME, not the ARN. Derive it from
+  # the shared role ARN (arn:aws:iam::<acct>:role/<name>).
+  role = element(split("/", var.lambda_role_arn), 1)
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -57,10 +59,10 @@ resource "aws_lambda_function" "send_notification" {
 
   environment {
     variables = {
-      TABLE_NAME     = var.dynamodb_table_name
+      TABLE_NAME = var.dynamodb_table_name
       # SMS disabled for now — push notifications only. Flip to "true" once the
       # AWS account is enabled for SMS (out of sandbox + origination identity).
-      SMS_ENABLED    = "false"
+      SMS_ENABLED                         = "false"
       AWS_NODEJS_CONNECTION_REUSE_ENABLED = "1"
     }
   }

@@ -54,6 +54,35 @@ resource "aws_s3_bucket_public_access_block" "uploads" {
 }
 
 # -----------------------------------------------------------------------------
+# Bucket policy — deny any non-TLS (HTTP) request
+# -----------------------------------------------------------------------------
+resource "aws_s3_bucket_policy" "uploads" {
+  bucket = aws_s3_bucket.uploads.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "EnforceTLSRequestsOnly"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "s3:*"
+        Resource = [
+          aws_s3_bucket.uploads.arn,
+          "${aws_s3_bucket.uploads.arn}/*",
+        ]
+        Condition = {
+          Bool = { "aws:SecureTransport" = "false" }
+        }
+      }
+    ]
+  })
+
+  # The public access block must exist first (block_public_policy).
+  depends_on = [aws_s3_bucket_public_access_block.uploads]
+}
+
+# -----------------------------------------------------------------------------
 # CORS — allow presigned URL uploads from the mobile app
 # -----------------------------------------------------------------------------
 resource "aws_s3_bucket_cors_configuration" "uploads" {
@@ -75,7 +104,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "uploads" {
   bucket = aws_s3_bucket.uploads.id
 
   rule {
-    id     = "transition-to-ia"
+    id     = "transition-and-expiration"
     status = "Enabled"
 
     filter {
@@ -85,6 +114,12 @@ resource "aws_s3_bucket_lifecycle_configuration" "uploads" {
     transition {
       days          = var.lifecycle_ia_transition_days
       storage_class = "STANDARD_IA"
+    }
+
+    # Auto-delete label/evidence photos after 180 days (cost + privacy).
+    # ID photos are already deleted immediately after OCR in process-label.
+    expiration {
+      days = 180
     }
 
     # Non-current versions cleaned up after 30 days
